@@ -1,0 +1,39 @@
+name = "common-expense-tracker-api"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Served only on the custom domain below, never on workers.dev.
+workers_dev = false
+
+# The page and the API on one hostname. Same origin means no CORS, and one
+# less thing that breaks on somebody's phone for reasons you cannot reproduce.
+# Wrangler creates the DNS record and the certificate for a custom domain.
+routes = [
+  { pattern = "expenses.thebarbellengineer.com", custom_domain = true }
+]
+
+# The rooms and the one registry that decides who may open one. SQLite-backed
+# Durable Objects are what the free plan includes, so this stays free at the
+# size a household uses.
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+[[durable_objects.bindings]]
+name = "REGISTRY"
+class_name = "Registry"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room", "Registry"]
+
+# The built single-file page, copied in by `npm run deploy` from the parent
+# directory. Requests that match a file get the file; everything else,
+# /api included, reaches the Worker.
+[assets]
+directory = "./public"
+
+# Only needed if the page and the API end up on different hostnames after
+# all. Leave it unset for the same-origin setup above.
+# [vars]
+# ALLOWED_ORIGIN = "https://expenses.example.com"

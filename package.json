@@ -1,0 +1,16 @@
+{
+  "name": "common-expense-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Split shared monthly expenses and see who owes whom.",
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "build": "node scripts/build.mjs",
+    "start": "node scripts/serve.mjs",
+    "api": "npm --prefix worker run dev",
+    "deploy": "npm run build && npm --prefix worker run deploy",
+    "smoke": "node scripts/smoke.mjs",
+    "ui": "node scripts/ui-check.mjs"
+  }
+}

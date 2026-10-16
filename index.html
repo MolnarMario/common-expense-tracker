@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Common Expense Tracker</title>
+    <meta name="description" content="Split shared monthly expenses and see who owes whom." />
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>&#129534;</text></svg>"
+    />
+    <script>
+      // Runs before first paint so the saved theme does not flash the other
+      // one. The key is duplicated from src/storage.js on purpose: this has
+      // to run before any module loads.
+      (function () {
+        var theme = null;
+        try {
+          var saved = JSON.parse(localStorage.getItem('common-expense-tracker/v1'));
+          if (saved && (saved.theme === 'light' || saved.theme === 'dark')) theme = saved.theme;
+        } catch (e) {
+          /* private mode or blocked storage */
+        }
+        if (!theme) {
+          theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#add-expense-form">Skip to add expense</a>
+
+    <header class="topbar">
+      <h1 class="brand">Common Expense Tracker</h1>
+
+      <div class="month-nav" role="group" aria-label="Month">
+        <button type="button" id="prev-month" class="icon-btn" aria-label="Previous month">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" /></svg>
+        </button>
+        <div class="month-current">
+          <label class="sr-only" for="month-picker">Selected month</label>
+          <input type="month" id="month-picker" />
+          <span class="month-label sr-only" id="month-label" aria-live="polite"></span>
+        </div>
+        <button type="button" id="next-month" class="icon-btn" aria-label="Next month">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5" /></svg>
+        </button>
+        <button type="button" id="this-month" class="ghost-btn">This month</button>
+      </div>
+
+      <button type="button" id="open-people" class="ghost-btn people-btn">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="9" cy="8" r="3.4" />
+          <path d="M2.9 19.5a6.1 6.1 0 0 1 12.2 0" />
+          <path d="M16.2 5.2a3.4 3.4 0 0 1 0 5.6M17.4 14.3a6.1 6.1 0 0 1 3.7 5.2" />
+        </svg>
+        <span>People</span>
+        <span class="count-pill" id="people-count"></span>
+      </button>
+
+      <button type="button" id="open-data" class="ghost-btn people-btn">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7.5 3.5v11M7.5 14.5 4.3 11.3M7.5 14.5l3.2-3.2" />
+          <path d="M16.5 20.5v-11M16.5 9.5l-3.2 3.2M16.5 9.5l3.2 3.2" />
+        </svg>
+        <span>Data</span>
+      </button>
+
+      <button type="button" id="open-share" class="ghost-btn people-btn share-btn">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="18" cy="5.5" r="2.6" />
+          <circle cx="6" cy="12" r="2.6" />
+          <circle cx="18" cy="18.5" r="2.6" />
+          <path d="M8.4 10.7 15.6 6.8M8.4 13.3l7.2 3.9" />
+        </svg>
+        <span>Share</span>
+        <span class="sync-dot" id="sync-dot" hidden></span>
+      </button>
+
+      <button type="button" id="theme-toggle" class="icon-btn theme-btn">
+        <svg class="theme-icon-light" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.25" />
+          <path
+            d="M12 2.5v2.2M12 19.3v2.2M4.8 4.8l1.6 1.6M17.6 17.6l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.8 19.2l1.6-1.6M17.6 6.4l1.6-1.6"
+          />
+        </svg>
+        <svg class="theme-icon-dark" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 13.4A8.2 8.2 0 1 1 10.6 4a6.7 6.7 0 0 0 9.4 9.4z" />
+        </svg>
+        <span class="sr-only" id="theme-label"></span>
+      </button>
+    </header>
+
+    <main class="layout">
+      <div class="column column-main">
+        <section class="card" aria-labelledby="add-expense-heading">
+          <div class="card-head">
+            <h2 id="add-expense-heading">Add an expense</h2>
+          </div>
+
+          <form id="add-expense-form" class="expense-form" novalidate>
+            <div class="field field-amount">
+              <label for="expense-amount">Amount</label>
+              <div class="amount-input">
+                <input
+                  type="text"
+                  inputmode="decimal"
+                  maxlength="18"
+                  id="expense-amount"
+                  name="amount"
+                  placeholder="0,00"
+                  autocomplete="off"
+                  required
+                />
+                <span class="amount-currency">RON</span>
+              </div>
+            </div>
+
+            <div class="field field-payer">
+              <label for="expense-payer">Paid by</label>
+              <select id="expense-payer" name="payer" required></select>
+            </div>
+
+            <div class="field field-date">
+              <label for="expense-date">Date</label>
+              <input type="date" id="expense-date" name="date" />
+            </div>
+
+            <div class="field field-description">
+              <label for="expense-description">Description <span class="hint">optional</span></label>
+              <input
+                type="text"
+                id="expense-description"
+                name="description"
+                placeholder="groceries, electricity, dinner"
+                autocomplete="off"
+                maxlength="80"
+              />
+            </div>
+
+            <div class="field field-submit">
+              <button type="submit" class="primary-btn wide" id="add-expense-btn">
+                Add expense
+              </button>
+            </div>
+          </form>
+          <p class="field-error" id="expense-error" role="alert"></p>
+          <p class="empty-state" id="expense-form-blocked" hidden>
+            Nobody on the list yet.
+            <button type="button" class="inline-link" id="blocked-add-people">
+              Add the people sharing these costs
+            </button>
+            before recording expenses.
+          </p>
+        </section>
+
+        <section class="card" aria-labelledby="expenses-heading">
+          <div class="card-head">
+            <h2 id="expenses-heading">Expenses</h2>
+            <span class="count-pill" id="expense-count"></span>
+          </div>
+
+          <div class="table-scroll">
+            <table class="expense-table" id="expense-table">
+              <caption class="sr-only">
+                Expenses recorded this month, newest first
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col" class="col-date">Date</th>
+                  <th scope="col">Description</th>
+                  <th scope="col">Paid by</th>
+                  <th scope="col" class="numeric">Amount</th>
+                  <th scope="col"><span class="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody id="expense-rows"></tbody>
+            </table>
+          </div>
+          <p class="empty-state" id="expenses-empty" hidden>
+            Nothing recorded yet. The first expense you add shows up here.
+          </p>
+        </section>
+      </div>
+
+      <aside class="column column-side">
+        <details class="card settlement-card" id="settlement">
+          <summary class="settlement-summary">
+            <span class="settlement-title">Bottom line</span>
+            <span class="summary-total" id="summary-total"></span>
+            <svg class="summary-chevron" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 9.5 12 15.5 18 9.5" />
+            </svg>
+          </summary>
+
+          <div class="settlement-body">
+            <div class="total-block">
+              <span class="total-label">Spent this month</span>
+              <strong class="total-value" id="total-spent">0,00 RON</strong>
+              <span class="total-sub" id="fair-share-line"></span>
+            </div>
+
+            <figure class="balance-bar" id="balance-bar" hidden>
+              <div class="bar-track">
+                <div class="bar-fills" id="bar-fills" role="img" aria-label=""></div>
+                <div class="bar-rules" id="bar-rules" aria-hidden="true"></div>
+              </div>
+              <div class="bar-flags" id="bar-flags" aria-hidden="true"></div>
+              <figcaption class="bar-caption" id="bar-caption"></figcaption>
+            </figure>
+
+            <div class="balance-scroll" id="balance-scroll">
+              <table class="balance-table" id="balance-table">
+                <caption>All amounts in RON</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Person</th>
+                    <th scope="col" class="numeric">Paid</th>
+                    <th scope="col" class="numeric col-fair">Fair share</th>
+                    <th scope="col" class="numeric">Balance</th>
+                  </tr>
+                </thead>
+                <tbody id="balance-rows"></tbody>
+              </table>
+            </div>
+
+            <h3 class="transfers-heading">Who pays whom</h3>
+            <ul class="transfer-list" id="transfer-list"></ul>
+            <p class="settled-note" id="settled-note" hidden>
+              Everyone is even. No payments needed.
+            </p>
+            <p class="empty-state" id="settlement-empty" hidden>
+              Add people and expenses to see the settlement.
+            </p>
+          </div>
+        </details>
+      </aside>
+    </main>
+
+    <footer class="footnote">
+      <span id="footer-local">
+        Everything is stored in this browser only. No account, no server.
+      </span>
+      <span id="footer-shared" hidden>
+        Shared with whoever has the link and the password. Encrypted before it
+        leaves this device, so the server holds it without being able to read it.
+      </span>
+      <button type="button" class="inline-link" id="footer-data">
+        Export or import your months
+      </button>
+      to keep a copy of your own.
+    </footer>
+
+    <dialog id="people-dialog" class="dialog">
+      <div class="dialog-form">
+        <div class="dialog-head">
+          <h2>People</h2>
+          <p>
+            One list, shared by every month. Everyone here splits each month's
+            expenses equally.
+          </p>
+        </div>
+
+        <form id="add-person-form" class="inline-form" novalidate>
+          <label class="sr-only" for="person-name">Name of the person to add</label>
+          <input
+            type="text"
+            id="person-name"
+            name="person-name"
+            placeholder="Add a person"
+            autocomplete="off"
+            maxlength="40"
+          />
+          <button type="submit" class="primary-btn">Add</button>
+        </form>
+        <p class="field-error" id="person-error" role="alert"></p>
+
+        <ul class="people-rows" id="people-list"></ul>
+        <p class="empty-state" id="people-empty" hidden>
+          Nobody yet. Type a name above to start.
+        </p>
+
+        <menu class="dialog-actions">
+          <button type="button" class="primary-btn" data-close-dialog>Done</button>
+        </menu>
+      </div>
+    </dialog>
+
+    <dialog id="data-dialog" class="dialog dialog-wide">
+      <div class="dialog-form">
+        <div class="dialog-head">
+          <h2>Export and import</h2>
+          <p>
+            Your months live in this browser and nowhere else. Export a copy to
+            keep a backup or to hand the whole thing to someone else.
+          </p>
+        </div>
+
+        <section class="data-section">
+          <div class="data-head">
+            <h3>Export</h3>
+            <div class="data-head-actions">
+              <button type="button" class="link-btn" id="export-all">All</button>
+              <button type="button" class="link-btn" id="export-none">None</button>
+            </div>
+          </div>
+
+          <ul class="month-picker-list" id="export-months"></ul>
+          <p class="empty-state" id="export-empty" hidden>
+            No expenses recorded yet, so there is nothing to export.
+          </p>
+
+          <fieldset class="format-group">
+            <legend>File format</legend>
+            <label class="choice">
+              <input type="radio" name="export-format" value="json" checked />
+              <span>JSON <span class="hint">exact copy, best for moving between browsers</span></span>
+            </label>
+            <label class="choice">
+              <input type="radio" name="export-format" value="csv" />
+              <span>CSV <span class="hint">one row per expense, opens in a spreadsheet</span></span>
+            </label>
+          </fieldset>
+
+          <button type="button" class="primary-btn wide" id="export-btn">Export</button>
+          <p class="field-error" id="export-error" role="alert"></p>
+        </section>
+
+        <section class="data-section">
+          <h3>Import</h3>
+          <p>
+            Months in the file replace the same months here. Every other month
+            you have is left exactly as it is.
+          </p>
+          <label class="file-drop" for="import-file">
+            <span id="import-file-label">Choose a JSON or CSV file</span>
+            <input
+              type="file"
+              id="import-file"
+              accept=".json,.csv,.txt,application/json,text/csv,text/plain"
+            />
+          </label>
+          <p class="field-error" id="import-error" role="alert"></p>
+        </section>
+
+        <menu class="dialog-actions">
+          <button type="button" class="primary-btn" data-close-dialog>Done</button>
+        </menu>
+      </div>
+    </dialog>
+
+    <dialog id="import-dialog" class="dialog dialog-wide">
+      <form method="dialog" class="dialog-form">
+        <h2>Import these months?</h2>
+        <p id="import-summary"></p>
+
+        <ul class="import-preview" id="import-preview"></ul>
+
+        <p class="import-note" id="import-people" hidden></p>
+        <p class="import-note" id="import-untouched" hidden></p>
+        <p class="field-error" id="import-warning" role="alert"></p>
+
+        <menu class="dialog-actions">
+          <button type="button" class="ghost-btn" data-close-dialog>Cancel</button>
+          <button type="submit" class="primary-btn" value="import" id="import-accept">
+            Import
+          </button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="expense-dialog" class="dialog">
+      <form method="dialog" id="edit-expense-form" class="dialog-form" novalidate>
+        <h2 id="expense-dialog-title">Edit expense</h2>
+
+        <div class="field">
+          <label for="edit-amount">Amount</label>
+          <div class="amount-input">
+            <input
+              type="text"
+              inputmode="decimal"
+              maxlength="18"
+              id="edit-amount"
+              placeholder="0,00"
+              autocomplete="off"
+            />
+            <span class="amount-currency">RON</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="edit-payer">Paid by</label>
+          <select id="edit-payer"></select>
+        </div>
+
+        <div class="field">
+          <label for="edit-date">Date</label>
+          <input type="date" id="edit-date" />
+        </div>
+
+        <div class="field">
+          <label for="edit-description">Description <span class="hint">optional</span></label>
+          <input type="text" id="edit-description" autocomplete="off" maxlength="80" />
+        </div>
+
+        <p class="field-error" id="edit-error" role="alert"></p>
+
+        <menu class="dialog-actions">
+          <button type="button" class="ghost-btn" data-close-dialog>Cancel</button>
+          <button type="submit" class="primary-btn" value="save">Save changes</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="confirm-dialog" class="dialog">
+      <form method="dialog" class="dialog-form">
+        <h2 id="confirm-title">Are you sure?</h2>
+        <p id="confirm-message"></p>
+        <menu class="dialog-actions">
+          <button type="button" class="ghost-btn" data-close-dialog>Cancel</button>
+          <button type="submit" class="danger-btn" value="confirm" id="confirm-accept">
+            Delete
+          </button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="remove-person-dialog" class="dialog">
+      <form method="dialog" class="dialog-form" id="remove-person-form">
+        <h2>Remove <span id="remove-person-name">this person</span></h2>
+        <p id="remove-person-message"></p>
+
+        <fieldset class="choice-group">
+          <legend>What should happen to those expenses?</legend>
+
+          <label class="choice">
+            <input type="radio" name="remove-mode" value="reassign" checked />
+            <span>
+              Move them to
+              <select id="reassign-target" aria-label="Person who takes over the expenses"></select>
+            </span>
+          </label>
+
+          <label class="choice">
+            <input type="radio" name="remove-mode" value="delete" />
+            <span>Delete those expenses</span>
+          </label>
+        </fieldset>
+
+        <p class="field-error" id="remove-person-error" role="alert"></p>
+
+        <menu class="dialog-actions">
+          <button type="button" class="ghost-btn" data-close-dialog>Cancel</button>
+          <button type="submit" class="danger-btn" value="remove">Remove person</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="share-dialog" class="dialog dialog-wide">
+      <div class="dialog-form">
+        <div class="dialog-head">
+          <h2>Share this tracker</h2>
+          <p id="share-intro"></p>
+        </div>
+
+        <p class="empty-state" id="share-unavailable" hidden></p>
+
+        <section class="data-section" id="share-create">
+          <h3>Start a shared tracker</h3>
+          <p>
+            You need an invite code. The password you pick here is what
+            encrypts everything: the server stores it sealed and cannot open
+            it, and nobody, including whoever runs this, can read your months
+            without that password.
+          </p>
+
+          <form id="create-room-form" class="share-form" novalidate>
+            <div class="field">
+              <label for="invite-code">Invite code</label>
+              <input
+                type="text"
+                id="invite-code"
+                placeholder="XXXX-XXXX-XXXX-XXXX"
+                autocomplete="off"
+                spellcheck="false"
+                maxlength="24"
+              />
+            </div>
+            <div class="field">
+              <label for="new-password">Password</label>
+              <input type="password" id="new-password" autocomplete="new-password" />
+            </div>
+            <div class="field">
+              <label for="new-password-again">Password again</label>
+              <input type="password" id="new-password-again" autocomplete="new-password" />
+            </div>
+            <div class="field field-submit">
+              <button type="submit" class="primary-btn wide" id="create-room-btn">
+                Create shared tracker
+              </button>
+            </div>
+          </form>
+          <p class="field-error" id="create-error" role="alert"></p>
+        </section>
+
+        <section class="data-section" id="share-join">
+          <h3>Open a link someone sent you</h3>
+          <form id="join-room-form" class="inline-form" novalidate>
+            <label class="sr-only" for="join-link">Tracker link</label>
+            <input
+              type="text"
+              id="join-link"
+              placeholder="Paste the link"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button type="submit" class="primary-btn">Open</button>
+          </form>
+          <p class="field-error" id="join-error" role="alert"></p>
+
+          <p class="hint" id="known-rooms-label" hidden>Trackers this browser has opened</p>
+          <ul class="known-rooms" id="known-rooms"></ul>
+        </section>
+
+        <section class="data-section" id="share-active" hidden>
+          <div class="share-status" id="share-status"></div>
+
+          <label for="share-link">Link to share</label>
+          <div class="copy-row">
+            <input type="text" id="share-link" readonly spellcheck="false" />
+            <button type="button" class="primary-btn" id="copy-link">Copy</button>
+          </div>
+          <p class="hint">
+            Send the link and the password separately. The link alone opens
+            nothing.
+          </p>
+
+          <p class="import-note" id="move-local-note" hidden></p>
+          <button type="button" class="primary-btn wide" id="move-local" hidden>
+            Move my own months in
+          </button>
+
+          <div class="usage" id="usage-block" hidden>
+            <div class="usage-bar">
+              <div class="usage-fill" id="usage-fill"></div>
+            </div>
+            <span class="hint" id="usage-label"></span>
+          </div>
+
+          <div class="share-actions">
+            <button type="button" class="link-btn" id="show-recovery">Recovery key</button>
+            <button type="button" class="link-btn" id="change-password">Change password</button>
+            <button type="button" class="link-btn" id="leave-room">Leave on this device</button>
+          </div>
+        </section>
+
+        <menu class="dialog-actions">
+          <button type="button" class="primary-btn" data-close-dialog>Done</button>
+        </menu>
+      </div>
+    </dialog>
+
+    <dialog id="unlock-dialog" class="dialog">
+      <form id="unlock-form" class="dialog-form" novalidate>
+        <h2>This tracker is locked</h2>
+        <p id="unlock-intro">
+          Enter the password once and this browser remembers it. It is never
+          sent anywhere: it only unlocks the key, here on this device.
+        </p>
+
+        <div class="field" id="password-field">
+          <label for="unlock-password">Password</label>
+          <input type="password" id="unlock-password" autocomplete="current-password" />
+        </div>
+
+        <div class="field" id="recovery-field" hidden>
+          <label for="unlock-recovery">Recovery key</label>
+          <input type="text" id="unlock-recovery" autocomplete="off" spellcheck="false" />
+        </div>
+
+        <p class="field-error" id="unlock-error" role="alert"></p>
+
+        <menu class="dialog-actions">
+          <button type="button" class="link-btn" id="use-recovery">
+            Use a recovery key
+          </button>
+          <button type="button" class="ghost-btn" data-close-dialog>Not now</button>
+          <button type="submit" class="primary-btn" id="unlock-btn">Unlock</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="recovery-dialog" class="dialog">
+      <div class="dialog-form">
+        <h2 id="recovery-title">Write this down</h2>
+        <p id="recovery-intro">
+          This is the only way back in if the password is forgotten. There is
+          no reset: nobody holds a copy of it, including whoever runs this.
+        </p>
+
+        <p class="recovery-key" id="recovery-key"></p>
+
+        <div class="share-actions">
+          <button type="button" class="link-btn" id="copy-recovery">Copy it</button>
+        </div>
+
+        <p class="field-error" id="recovery-warning" role="alert"></p>
+
+        <menu class="dialog-actions">
+          <button type="button" class="primary-btn" data-close-dialog>
+            I have saved it
+          </button>
+        </menu>
+      </div>
+    </dialog>
+
+    <dialog id="password-dialog" class="dialog">
+      <form id="password-form" class="dialog-form" novalidate>
+        <h2>Change the password</h2>
+        <p>
+          The same data key gets re-wrapped, so nothing has to be re-encrypted
+          and devices already unlocked keep working. The new password is what
+          the next device will be asked for.
+        </p>
+
+        <div class="field">
+          <label for="change-new">New password</label>
+          <input type="password" id="change-new" autocomplete="new-password" />
+        </div>
+        <div class="field">
+          <label for="change-again">New password again</label>
+          <input type="password" id="change-again" autocomplete="new-password" />
+        </div>
+
+        <p class="field-error" id="change-error" role="alert"></p>
+
+        <menu class="dialog-actions">
+          <button type="button" class="ghost-btn" data-close-dialog>Cancel</button>
+          <button type="submit" class="primary-btn">Change password</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+    <script type="module" src="src/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+node_modules/
+worker/node_modules/
+# Local Wrangler state (dev Durable Object databases) and the admin secret
+worker/.wrangler/
+worker/.admin-token
+.dev.vars
+# Copied in from the root by `npm run deploy`
+worker/public/index.html
+# AI Hive coordination files
+.aihive/

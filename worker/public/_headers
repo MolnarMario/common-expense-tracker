@@ -1,0 +1,4 @@
+/*
+  X-Content-Type-Options: nosniff
+  Content-Security-Policy: frame-ancestors 'self' https://thebarbellengineer.com
+  Referrer-Policy: no-referrer
