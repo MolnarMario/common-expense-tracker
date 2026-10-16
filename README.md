@@ -4,6 +4,8 @@ Split shared monthly costs between any number of people and see who owes whom.
 No account and no dependencies. Data lives in the browser's localStorage, and
 you can export any set of months as JSON or CSV to move it elsewhere.
 
+**Live: https://expenses.thebarbellengineer.com/**
+
 Two people can also share one tracker over a link, editing it at the same time
 from any device. That part needs a server, and the server is built so it cannot
 read a single thing it stores. See [Sharing](#sharing).
