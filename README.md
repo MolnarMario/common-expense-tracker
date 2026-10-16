@@ -189,6 +189,11 @@ Nobody can make a tracker by asking. It takes an invite code you handed out or
 the admin token only you have. See [`worker/README.md`](worker/README.md) for
 deploying the server and minting codes.
 
+If you fork this to host it yourself, change the hostname in the `routes` entry
+of [`worker/wrangler.toml`](worker/wrangler.toml) first. It points at the
+maintainer's domain, which your Cloudflare account does not own, so the deploy
+fails until you swap in one of yours.
+
 The link carries only the tracker id, in the fragment after `#`. Browsers never
 put that part in the HTTP request and strip it from the `Referer` header, so it
 stays out of the web server's logs and out of anyone else's.

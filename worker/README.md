@@ -18,20 +18,22 @@ npx wrangler secret put ADMIN_TOKEN     # paste a long random string
 npx wrangler deploy
 ```
 
-Then point it at your domain. In `wrangler.toml`, uncomment the route and fill
-in your hostname:
+Before you deploy, change the hostname. `wrangler.toml` ships with the
+maintainer's domain, and `wrangler deploy` will fail on yours:
 
 ```toml
-[[routes]]
-pattern = "expenses.example.com/api/*"
-zone_name = "example.com"
+routes = [
+  { pattern = "expenses.example.com", custom_domain = true }
+]
 ```
 
-Serve the page itself from that same hostname, whether that is Cloudflare Pages,
-a bucket, or anything else. Same origin means no CORS, and one less thing that
-breaks on somebody's phone for reasons you cannot reproduce. If the page really
-must live somewhere else, set `ALLOWED_ORIGIN` in `[vars]` to its exact origin,
-and nothing else will be allowed through.
+The domain has to be a zone on your Cloudflare account. Wrangler creates the DNS
+record and the certificate. `npm run deploy` from the parent directory builds the
+page, copies it into `public/`, and serves it and the API from that one hostname.
+Same origin means no CORS, and one less thing that breaks on somebody's phone
+for reasons you cannot reproduce. If the page really must live somewhere else,
+set `ALLOWED_ORIGIN` in `[vars]` to its exact origin, and nothing else will be
+allowed through.
 
 Generate the admin token with something like `openssl rand -base64 32`. It is
 the only thing standing between a stranger and the ability to mint rooms, and
