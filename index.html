@@ -470,7 +470,8 @@
         <section class="data-section" id="share-create">
           <h3>Start a shared tracker</h3>
           <p>
-            You need an invite code. The password you pick here is what
+            You need an invite code, and you can ask for one below. The
+            password you pick here is what
             encrypts everything: the server stores it sealed and cannot open
             it, and nobody, including whoever runs this, can read your months
             without that password.
@@ -503,6 +504,34 @@
             </div>
           </form>
           <p class="field-error" id="create-error" role="alert"></p>
+
+          <div class="access-request">
+            <p class="hint" id="access-status" role="status" hidden></p>
+            <button type="button" class="inline-link" id="access-toggle">
+              No code? Request one
+            </button>
+
+            <form id="access-form" class="share-form access-form" novalidate hidden>
+              <div class="field">
+                <label for="access-name">Your name</label>
+                <input type="text" id="access-name" maxlength="60" autocomplete="name" />
+              </div>
+              <div class="field">
+                <label for="access-message">Who you are and who you will share it with</label>
+                <textarea id="access-message" rows="3" maxlength="500"></textarea>
+              </div>
+              <p class="hint">
+                This goes to whoever runs this site, and nothing else about you
+                does: no email, no account. Come back to this dialog in this
+                browser. Once your request is approved, the code fills in above
+                by itself.
+              </p>
+              <div class="field field-submit">
+                <button type="submit" class="primary-btn wide" id="access-send">Send request</button>
+              </div>
+            </form>
+            <p class="field-error" id="access-error" role="alert"></p>
+          </div>
         </section>
 
         <section class="data-section" id="share-join">

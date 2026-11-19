@@ -55,6 +55,21 @@ node ../scripts/admin.mjs rooms                   # what exists
 node ../scripts/admin.mjs codes                   # what is spent
 ```
 
+```
+node ../scripts/admin.mjs requests                # who asked for a code
+node ../scripts/admin.mjs approve <id>            # mint one for them
+node ../scripts/admin.mjs decline <id>
+```
+
+Requests come from the "No code? Request one" link in the Share dialog.
+Each holds a name and a message, kept for 30 days, three a day per
+address and 200 at most. Approving mints a code that only the requesting
+browser can collect, with the secret it was given when it asked; the
+server stores just a hash of that secret. To hear when one arrives, set
+`NOTIFY_URL` (for example an ntfy.sh topic) with
+`npx wrangler secret put NOTIFY_URL`. The Worker posts a one-line notice
+there that says nothing about who asked.
+
 `mint` is the one that scales. You hand someone a code, they type it into the
 page, and it burns itself making their room. `room` is the hands-on version:
 it makes the key here, locks it with the password you pass, and prints the
@@ -68,6 +83,11 @@ POST /api/rooms                    admin token, or an invite code, plus a lock
 GET  /api/rooms                    admin token
 POST /api/invites                  admin token
 GET  /api/invites                  admin token
+POST /api/requests                 public: ask for a code
+POST /api/requests/status          public: the requester's id and secret
+GET  /api/requests                 admin token
+POST /api/requests/:id/approve     admin token
+POST /api/requests/:id/decline     admin token
 GET  /api/rooms/:id/lock           public: the wrapped key, useless on its own
 POST /api/rooms/:id/lock           needs proof you hold the data key
 GET  /api/rooms/:id/usage

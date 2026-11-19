@@ -10,6 +10,7 @@ import {
 } from './money.js';
 import { createStorage, createDeviceMemory, LOCAL_KEY } from './storage.js';
 import { createSharing, MODE } from './sharing.js';
+import { createAccessRequests, ACCESS } from './access.js';
 import { STATUS } from './sync.js';
 import { isRoomId, knownRooms, readRoomId, syncEndpoint } from './room-link.js';
 import { currentMonthId, shiftMonth, monthLabel, defaultDateFor, parseMonthId } from './months.js';
@@ -150,6 +151,14 @@ const el = {
   newPasswordAgain: $('new-password-again'),
   createRoomBtn: $('create-room-btn'),
   createError: $('create-error'),
+
+  accessStatus: $('access-status'),
+  accessToggle: $('access-toggle'),
+  accessForm: $('access-form'),
+  accessName: $('access-name'),
+  accessMessage: $('access-message'),
+  accessSend: $('access-send'),
+  accessError: $('access-error'),
 
   joinRoomForm: $('join-room-form'),
   joinLink: $('join-link'),
@@ -1455,11 +1464,70 @@ function shortDay(ms) {
 function openShareDialog() {
   showError(el.createError, '');
   showError(el.joinError, '');
+  showError(el.accessError, '');
   el.joinLink.value = '';
   localOpCount = sharing.isAvailable() ? sharing.localOps().length : 0;
   renderShareDialog();
   el.shareDialog.showModal();
+  if (sharing.isAvailable() && shareState.mode !== MODE.room) void refreshAccess();
 }
+
+// ------------------------------------------------- asking for a code
+
+const accessRequests = (() => {
+  const endpoint = syncEndpoint(document, window.location);
+  return endpoint ? createAccessRequests({ endpoint }) : null;
+})();
+
+/** Ask the server how this browser's request went, then show it. */
+async function refreshAccess() {
+  if (!accessRequests) return;
+  renderAccess(accessRequests.current());
+  if (accessRequests.current().status === ACCESS.none) return;
+  renderAccess(await accessRequests.check());
+}
+
+function renderAccess(state) {
+  const status = state.status;
+  el.accessToggle.hidden = status === ACCESS.pending || status === ACCESS.approved;
+  if (status !== ACCESS.none) el.accessForm.hidden = true;
+
+  let message = '';
+  if (status === ACCESS.pending) {
+    message =
+      'Request sent ' +
+      (state.sentAt ? shortDay(state.sentAt) : '') +
+      '. It is waiting for approval; check back here in this browser.';
+  } else if (status === ACCESS.approved) {
+    message = 'Your request was approved and the code is filled in. Pick a password and create the tracker.';
+    if (state.code && !el.inviteCode.value.trim()) el.inviteCode.value = state.code;
+  } else if (status === ACCESS.declined) {
+    message = 'Your request was not approved.';
+    // Read once, then let them ask again.
+    accessRequests.forget();
+  } else if (state.expired) {
+    message = 'Your earlier request expired. You can send a new one.';
+  }
+  el.accessStatus.textContent = message;
+  el.accessStatus.hidden = message === '';
+}
+
+el.accessToggle.addEventListener('click', () => {
+  el.accessForm.hidden = !el.accessForm.hidden;
+  if (!el.accessForm.hidden) el.accessName.focus();
+});
+
+el.accessForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!accessRequests) return;
+  showError(el.accessError, '');
+  const done = busy(el.accessSend, 'Sending…');
+  const result = await accessRequests.send(el.accessName.value, el.accessMessage.value);
+  done();
+  if (!result.ok) return showError(el.accessError, result.error);
+  el.accessForm.reset();
+  renderAccess(accessRequests.current());
+});
 
 el.openShare.addEventListener('click', openShareDialog);
 
@@ -1486,6 +1554,11 @@ el.createRoomForm.addEventListener('submit', async (event) => {
 
   if (!result.ok) return showError(el.createError, result.error);
 
+  // The approved code is spent now, so the request has done its job.
+  if (accessRequests && accessRequests.current().code === code) {
+    accessRequests.forget();
+    renderAccess({ status: ACCESS.none });
+  }
   el.createRoomForm.reset();
   el.shareDialog.close('cancel');
   showRecoveryKey(result.recoveryKey, {

@@ -1590,6 +1590,31 @@ tbody tr:last-child td {
   overflow-wrap: anywhere;
   user-select: all;
 }
+
+/* Asking for an invite code, under the create form. */
+
+.access-request {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+
+.access-form {
+  align-self: stretch;
+}
+
+.field textarea {
+  padding: 0.55rem 0.7rem;
+  background-color: var(--surface-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  resize: vertical;
+}
     </style>
     <link
       rel="icon"
@@ -2055,7 +2080,8 @@ tbody tr:last-child td {
         <section class="data-section" id="share-create">
           <h3>Start a shared tracker</h3>
           <p>
-            You need an invite code. The password you pick here is what
+            You need an invite code, and you can ask for one below. The
+            password you pick here is what
             encrypts everything: the server stores it sealed and cannot open
             it, and nobody, including whoever runs this, can read your months
             without that password.
@@ -2088,6 +2114,34 @@ tbody tr:last-child td {
             </div>
           </form>
           <p class="field-error" id="create-error" role="alert"></p>
+
+          <div class="access-request">
+            <p class="hint" id="access-status" role="status" hidden></p>
+            <button type="button" class="inline-link" id="access-toggle">
+              No code? Request one
+            </button>
+
+            <form id="access-form" class="share-form access-form" novalidate hidden>
+              <div class="field">
+                <label for="access-name">Your name</label>
+                <input type="text" id="access-name" maxlength="60" autocomplete="name" />
+              </div>
+              <div class="field">
+                <label for="access-message">Who you are and who you will share it with</label>
+                <textarea id="access-message" rows="3" maxlength="500"></textarea>
+              </div>
+              <p class="hint">
+                This goes to whoever runs this site, and nothing else about you
+                does: no email, no account. Come back to this dialog in this
+                browser. Once your request is approved, the code fills in above
+                by itself.
+              </p>
+              <div class="field field-submit">
+                <button type="submit" class="primary-btn wide" id="access-send">Send request</button>
+              </div>
+            </form>
+            <p class="field-error" id="access-error" role="alert"></p>
+          </div>
         </section>
 
         <section class="data-section" id="share-join">
@@ -2239,17 +2293,13 @@ tbody tr:last-child td {
 
   // Money helpers. The app is RON only. Everything is stored and calculated
   // in bani as plain integers, so no float ever touches a balance.
-
   const CURRENCY = 'RON';
-
   /** What one hundredth of a leu is called, for rounding copy. */
   const MINOR_UNIT = 'ban';
-
   /** Digits and separators only. Everything else the user types is dropped. */
   function sanitizeAmountInput(raw) {
     return String(raw == null ? '' : raw).replace(/[^\d.,\s]/g, '');
   }
-
   /**
    * Parse user input into minor units.
    *
@@ -2269,14 +2319,11 @@ tbody tr:last-child td {
       return roundToMinor(input);
     }
     if (typeof input !== 'string') return null;
-
     const s = input.replace(/[\s  ]/g, '');
     if (s === '' || !/^[\d.,]+$/.test(s)) return null;
-
     const lastSeparator = Math.max(s.lastIndexOf('.'), s.lastIndexOf(','));
     let whole = s;
     let frac = '';
-
     if (lastSeparator !== -1) {
       const tail = s.slice(lastSeparator + 1);
       if (!/^\d+$/.test(tail)) return null;
@@ -2291,26 +2338,20 @@ tbody tr:last-child td {
         return null;
       }
     }
-
     // What is left must be plain digits, optionally grouped in threes.
     if (!/^(\d+([.,]\d{3})*)?$/.test(whole)) return null;
-
     const digits = whole.replace(/[.,]/g, '') || '0';
     if (digits === '0' && frac === '') return 0;
-
     const minor = Number(digits) * 100 + Number(frac.padEnd(2, '0'));
     return Number.isSafeInteger(minor) ? minor : null;
   }
-
   function roundToMinor(major) {
     return Math.round((major + Number.EPSILON) * 100);
   }
-
   /** Minor units back to a major-unit number, for display only. */
   function toMajor(minor) {
     return minor / 100;
   }
-
   /** "1.234,56" style, no currency symbol. Used inside inputs. */
   function formatPlain(minor) {
     return new Intl.NumberFormat('ro-RO', {
@@ -2318,12 +2359,10 @@ tbody tr:last-child td {
       maximumFractionDigits: 2,
     }).format(toMajor(minor));
   }
-
   /** "1.234,56 RON". The space is non-breaking so the unit never wraps off. */
   function formatMoney(minor) {
     return formatPlain(minor) + '\u00a0' + CURRENCY;
   }
-
   /** Bare number with an explicit + or -, for columns already labelled RON. */
   function formatSignedPlain(minor) {
     const sign = minor > 0 ? '+' : minor < 0 ? '−' : '';
@@ -2335,17 +2374,13 @@ tbody tr:last-child td {
 
   // Month ids are "YYYY-MM" strings. They sort lexicographically, which is
   // the whole reason for the format.
-
   const LABEL = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' });
-
   function currentMonthId(now = new Date()) {
     return toMonthId(now.getFullYear(), now.getMonth() + 1);
   }
-
   function toMonthId(year, month) {
     return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`;
   }
-
   function parseMonthId(id) {
     const m = /^(\d{4})-(\d{2})$/.exec(id ?? '');
     if (!m) return null;
@@ -2354,20 +2389,17 @@ tbody tr:last-child td {
     if (month < 1 || month > 12) return null;
     return { year, month };
   }
-
   function shiftMonth(id, delta) {
     const parsed = parseMonthId(id);
     if (!parsed) return id;
     const zeroBased = parsed.year * 12 + (parsed.month - 1) + delta;
     return toMonthId(Math.floor(zeroBased / 12), (zeroBased % 12) + 1);
   }
-
   function monthLabel(id) {
     const parsed = parseMonthId(id);
     if (!parsed) return id;
     return LABEL.format(new Date(parsed.year, parsed.month - 1, 1));
   }
-
   /** Default date for a new expense: today if we are in that month, else the 1st. */
   function defaultDateFor(id, now = new Date()) {
     const parsed = parseMonthId(id);
@@ -2375,7 +2407,6 @@ tbody tr:last-child td {
     if (currentMonthId(now) === id) return isoDate(now);
     return `${id}-01`;
   }
-
   function isoDate(date) {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -2390,7 +2421,6 @@ tbody tr:last-child td {
   // as a valid one. The browser and the Cloudflare Worker both import this
   // file, so a record the client will send is exactly a record the server
   // will accept. Keep it free of DOM and of Worker APIs.
-
   const LIMITS = {
     /**
      * Room-wide ceiling, counted on the encrypted bytes actually stored.
@@ -2406,33 +2436,27 @@ tbody tr:last-child td {
     batchOps: 400,
     /** Tombstones older than this are pruned; nothing syncs that late. */
     tombstoneDays: 90,
-
     nameChars: 40,
     descriptionChars: 80,
     /** ~99 billion RON. Above this an amount is a typo, not a rent payment. */
     maxAmount: 9999999999999,
   };
-
   const MONTH_ID = /^(\d{4})-(\d{2})$/;
   const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
   function isMonthId(id) {
     const m = MONTH_ID.exec(typeof id === 'string' ? id : '');
     if (!m) return false;
     const month = Number(m[2]);
     return month >= 1 && month <= 12;
   }
-
   /** Ids are ours, but they arrive over a socket, so treat them as input. */
   function isId(value) {
     return typeof value === 'string' && value.length > 0 && value.length <= 64;
   }
-
   function text(value, maxChars) {
     if (typeof value !== 'string') return '';
     return value.trim().slice(0, maxChars);
   }
-
   /**
    * @returns {{id: string, name: string}|null} null when the input is not a
    *   person at all. A blank name is not a person.
@@ -2443,7 +2467,6 @@ tbody tr:last-child td {
     if (!name) return null;
     return { id: raw.id, name };
   }
-
   /**
    * @returns {{id, month, amount, payerId, description, date}|null}
    *   The month rides inside the record so one op carries everything the
@@ -2483,20 +2506,16 @@ tbody tr:last-child td {
   // decrypted cache both sit in localStorage, because that is what "type the
   // password once per device" means. Encryption here is about the server and
   // the wire, not about someone holding your unlocked laptop.
-
   /** OWASP's floor for PBKDF2-SHA256. About a second on a mid-range phone. */
   const ITERATIONS = 600000;
-
   const SALT_BYTES = 16;
   const IV_BYTES = 12;
   const BASE32 = 'abcdefghijklmnopqrstuvwxyz234567';
-
   function subtle() {
     const api = typeof crypto !== 'undefined' && crypto.subtle;
     if (!api) throw new Error('no-subtle-crypto');
     return api;
   }
-
   /**
    * WebCrypto is only handed out in a secure context, so an http:// page or
    * a file:// one cannot do any of this. Sharing is switched off there
@@ -2505,25 +2524,19 @@ tbody tr:last-child td {
   function canEncrypt() {
     return typeof crypto !== 'undefined' && !!crypto.subtle && !!crypto.getRandomValues;
   }
-
   function randomBytes(length) {
     return crypto.getRandomValues(new Uint8Array(length));
   }
-
   // ------------------------------------------------------------------- keys
-
   function generateDataKey() {
     return subtle().generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
   }
-
   async function importDataKey(raw) {
     return subtle().importKey('raw', raw, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
   }
-
   async function exportDataKey(key) {
     return new Uint8Array(await subtle().exportKey('raw', key));
   }
-
   /**
    * Password to wrapping key. Slow on purpose: the whole point is that
    * guessing at the password costs real time even with the wrapped blob in
@@ -2546,7 +2559,6 @@ tbody tr:last-child td {
       ['encrypt', 'decrypt']
     );
   }
-
   /**
    * The blob the server holds for a room. Everything in it is safe to hand
    * to anyone: without the password it is noise.
@@ -2569,7 +2581,6 @@ tbody tr:last-child td {
       verifier: await verifierFor(dataKey),
     };
   }
-
   /**
    * @returns {Promise<CryptoKey|null>} null means the password was wrong.
    *   AES-GCM authenticates, so a wrong key fails to decrypt rather than
@@ -2591,7 +2602,6 @@ tbody tr:last-child td {
       return null;
     }
   }
-
   /**
    * Proof that you hold the data key, without revealing it. Changing a
    * room's password takes this, so someone who only has the link can
@@ -2602,9 +2612,7 @@ tbody tr:last-child td {
     const digest = await subtle().digest('SHA-256', join(raw, new TextEncoder().encode('verify')));
     return toBase64(new Uint8Array(digest));
   }
-
   // -------------------------------------------------------------- records
-
   /** @returns {Promise<string>} base64 of iv || ciphertext. */
   async function seal(dataKey, value) {
     const iv = randomBytes(IV_BYTES);
@@ -2614,7 +2622,6 @@ tbody tr:last-child td {
     );
     return toBase64(join(iv, sealed));
   }
-
   /** @returns {Promise<object|null>} null for anything that will not open. */
   async function unseal(dataKey, blob) {
     if (typeof blob !== 'string' || blob.length < 16) return null;
@@ -2630,9 +2637,7 @@ tbody tr:last-child td {
       return null;
     }
   }
-
   // ----------------------------------------------------- the recovery key
-
   /**
    * The data key itself, written out for a human. Whoever has this string
    * is in, password or no password, which is exactly why it is shown once
@@ -2642,7 +2647,6 @@ tbody tr:last-child td {
     const raw = await exportDataKey(dataKey);
     return groups(base32Encode(raw), 4);
   }
-
   async function fromRecoveryKey(text) {
     const cleaned = String(text || '')
       .toLowerCase()
@@ -2655,7 +2659,6 @@ tbody tr:last-child td {
       return null;
     }
   }
-
   function base32Encode(bytes) {
     let bits = 0;
     let value = 0;
@@ -2671,7 +2674,6 @@ tbody tr:last-child td {
     if (bits > 0) out += BASE32[(value << (5 - bits)) & 31];
     return out;
   }
-
   function base32Decode(text) {
     let bits = 0;
     let value = 0;
@@ -2688,26 +2690,21 @@ tbody tr:last-child td {
     }
     return new Uint8Array(out);
   }
-
   function groups(text, size) {
     return (text.match(new RegExp('.{1,' + size + '}', 'g')) || []).join('-');
   }
-
   // ------------------------------------------------------------- plumbing
-
   function join(a, b) {
     const out = new Uint8Array(a.length + b.length);
     out.set(a, 0);
     out.set(b, a.length);
     return out;
   }
-
   function toBase64(bytes) {
     let binary = '';
     for (const byte of bytes) binary += String.fromCharCode(byte);
     return btoa(binary);
   }
-
   function fromBase64(text) {
     const binary = atob(text);
     const out = new Uint8Array(binary.length);
@@ -2725,14 +2722,11 @@ tbody tr:last-child td {
   // key, so joining one does not touch what you already had and leaving one
   // hands it straight back. That is also the cache: the app opens on the
   // last thing it saw, then the socket corrects it.
-
   const LOCAL_KEY = 'common-expense-tracker/v1';
-
   /** Where a room's own cached copy lives on this device. */
   function roomKey(roomId) {
     return 'common-expense-tracker/room/' + roomId;
   }
-
   function memoryBackend() {
     let value = null;
     return {
@@ -2745,7 +2739,6 @@ tbody tr:last-child td {
       },
     };
   }
-
   function localBackend(key) {
     return {
       read: () => window.localStorage.getItem(key),
@@ -2753,7 +2746,6 @@ tbody tr:last-child td {
       remove: () => window.localStorage.removeItem(key),
     };
   }
-
   function pickBackend(key) {
     try {
       const probe = key + '/probe';
@@ -2766,7 +2758,6 @@ tbody tr:last-child td {
       return memoryBackend();
     }
   }
-
   /**
    * @param {string|{read:Function,write:Function,remove?:Function}} keyOrBackend
    *   A key names a slot in localStorage. A backend object is for tests.
@@ -2774,7 +2765,6 @@ tbody tr:last-child td {
   function createStorage(keyOrBackend = LOCAL_KEY) {
     const backend =
       typeof keyOrBackend === 'string' ? pickBackend(keyOrBackend) : keyOrBackend;
-
     return {
       load() {
         try {
@@ -2806,7 +2796,6 @@ tbody tr:last-child td {
       },
     };
   }
-
   /**
    * Small key-value corner for things that are about this browser rather
    * than about any month: which rooms it has opened, mostly.
@@ -2837,18 +2826,14 @@ tbody tr:last-child td {
   // at-least-once, which is the easy kind to build.
   //
   // Imported by the browser and by the Worker. No DOM, no Worker APIs.
-
   const KINDS = ['person', 'expense'];
   const TYPES = ['put', 'del'];
-
   function putPerson(person, at = Date.now()) {
     return { kind: 'person', type: 'put', at, record: { id: person.id, name: person.name } };
   }
-
   function delPerson(id, at = Date.now()) {
     return { kind: 'person', type: 'del', at, id };
   }
-
   function putExpense(month, expense, at = Date.now()) {
     return {
       kind: 'expense',
@@ -2864,11 +2849,9 @@ tbody tr:last-child td {
       },
     };
   }
-
   function delExpense(id, at = Date.now()) {
     return { kind: 'expense', type: 'del', at, id };
   }
-
   /**
    * Anything arriving over the socket goes through here first, in both
    * directions. Returns a clean op or null; there is no half-valid op.
@@ -2876,16 +2859,13 @@ tbody tr:last-child td {
   function normalizeOp(raw) {
     if (!raw || !KINDS.includes(raw.kind) || !TYPES.includes(raw.type)) return null;
     const at = Number.isFinite(raw.at) ? raw.at : Date.now();
-
     if (raw.type === 'del') {
       return isId(raw.id) ? { kind: raw.kind, type: 'del', at, id: raw.id } : null;
     }
-
     const record =
       raw.kind === 'person' ? normalizePerson(raw.record) : normalizeExpense(raw.record);
     return record ? { kind: raw.kind, type: 'put', at, record } : null;
   }
-
   function normalizeOps(list) {
     if (!Array.isArray(list) || list.length > LIMITS.batchOps) return null;
     const ops = [];
@@ -2895,14 +2875,11 @@ tbody tr:last-child td {
     }
     return ops;
   }
-
   /** The id an op is about, whichever form it takes. */
   function opId(op) {
     return op.type === 'del' ? op.id : op.record.id;
   }
-
   // ------------------------------------------------------- ops on the wire
-
   // What actually crosses the network is a sealed op: the record is one
   // opaque blob the server cannot read. Only the parts the server has to act
   // on are left in the clear, and each of them is deliberate.
@@ -2915,18 +2892,15 @@ tbody tr:last-child td {
   //
   // Everything a person typed, the amounts, names, dates, descriptions, and
   // even which month an expense belongs to, is inside the blob.
-
   /** Server-side validation. Pure: the Worker imports this and no crypto. */
   function normalizeSealedOp(raw) {
     if (!raw || !KINDS.includes(raw.kind) || !TYPES.includes(raw.type)) return null;
     if (!isId(raw.id) || !Number.isFinite(raw.at)) return null;
-
     if (raw.type === 'del') return { kind: raw.kind, type: 'del', at: raw.at, id: raw.id };
     if (typeof raw.blob !== 'string' || raw.blob.length === 0) return null;
     if (raw.blob.length > LIMITS.recordBytes) return null;
     return { kind: raw.kind, type: 'put', at: raw.at, id: raw.id, blob: raw.blob };
   }
-
   function normalizeSealedOps(list) {
     if (!Array.isArray(list) || list.length > LIMITS.batchOps) return null;
     const ops = [];
@@ -2936,19 +2910,15 @@ tbody tr:last-child td {
     }
     return ops;
   }
-
   /** What a sealed record costs a room, key included. */
   function sealedBytes(kind, id, blob) {
     return 2 + id.length + (blob ? blob.length : 0);
   }
-
   // ------------------------------------------------------------ applying ops
-
   function monthOf(state, id) {
     if (!state.months[id]) state.months[id] = { id, expenses: [] };
     return state.months[id];
   }
-
   /**
    * Fold one op into a state object, in place.
    *
@@ -2959,13 +2929,11 @@ tbody tr:last-child td {
     if (op.kind === 'person') return op.type === 'put' ? putPersonIn(state, op) : delPersonIn(state, op);
     return op.type === 'put' ? putExpenseIn(state, op) : delExpenseIn(state, op);
   }
-
   function applyOps(state, ops) {
     let changed = false;
     for (const op of ops) changed = applyOp(state, op) || changed;
     return changed;
   }
-
   function putPersonIn(state, op) {
     const existing = state.people.find((p) => p.id === op.record.id);
     if (existing) {
@@ -2978,13 +2946,11 @@ tbody tr:last-child td {
     state.people.push({ id: op.record.id, name: op.record.name });
     return true;
   }
-
   function delPersonIn(state, op) {
     const before = state.people.length;
     state.people = state.people.filter((p) => p.id !== op.id);
     return state.people.length !== before;
   }
-
   function putExpenseIn(state, op) {
     const { id, month } = op.record;
     const value = {
@@ -2994,7 +2960,6 @@ tbody tr:last-child td {
       description: op.record.description,
       date: op.record.date,
     };
-
     let changed = false;
     // An expense that moved months has to leave the old one behind, or the
     // month it moved out of keeps a ghost copy.
@@ -3004,7 +2969,6 @@ tbody tr:last-child td {
       other.expenses = other.expenses.filter((e) => e.id !== id);
       if (other.expenses.length !== before) changed = true;
     }
-
     const target = monthOf(state, month);
     const at = target.expenses.findIndex((e) => e.id === id);
     if (at === -1) {
@@ -3015,7 +2979,6 @@ tbody tr:last-child td {
     target.expenses[at] = value;
     return true;
   }
-
   function delExpenseIn(state, op) {
     let changed = false;
     for (const month of Object.values(state.months)) {
@@ -3025,7 +2988,6 @@ tbody tr:last-child td {
     }
     return changed;
   }
-
   function same(a, b) {
     return (
       a.amount === b.amount &&
@@ -3034,9 +2996,7 @@ tbody tr:last-child td {
       a.date === b.date
     );
   }
-
   // ------------------------------------------------- states, rooms, snapshots
-
   /**
    * Every record in a state as the ops that would recreate it. This is what
    * "move my data into the room" sends, and what the server would need to
@@ -3049,14 +3009,12 @@ tbody tr:last-child td {
     }
     return ops;
   }
-
   /** Chunk a long op list into messages the server will accept. */
   function chunkOps(ops, size = LIMITS.batchOps) {
     const out = [];
     for (let i = 0; i < ops.length; i += size) out.push(ops.slice(i, i + size));
     return out;
   }
-
   /**
    * Rebuild the shared half of a state from a room snapshot, leaving the
    * private half (theme, which month is open, whether the panel is folded)
@@ -3067,7 +3025,6 @@ tbody tr:last-child td {
     state.months = {};
     const people = Array.isArray(snapshot && snapshot.people) ? snapshot.people : [];
     const expenses = Array.isArray(snapshot && snapshot.expenses) ? snapshot.expenses : [];
-
     for (const raw of people) {
       const person = normalizePerson(raw);
       if (person) state.people.push(person);
@@ -3088,7 +3045,6 @@ tbody tr:last-child td {
   // Note that decrypted records are validated on the way in, exactly as if
   // they had arrived in the clear. Holding the key gets you in; it does not
   // buy you the right to put nonsense in the other person's roster.
-
   async function sealOp(dataKey, op) {
     if (op.type === 'del') {
       return { kind: op.kind, type: 'del', at: op.at, id: op.id };
@@ -3101,11 +3057,9 @@ tbody tr:last-child td {
       blob: await seal(dataKey, op.record),
     };
   }
-
   function sealOps(dataKey, ops) {
     return Promise.all(ops.map((op) => sealOp(dataKey, op)));
   }
-
   /** @returns {Promise<object|null>} null for a blob this key cannot open. */
   async function openOp(dataKey, item) {
     if (item.type === 'del') {
@@ -3115,12 +3069,10 @@ tbody tr:last-child td {
     if (!record) return null;
     return normalizeOp({ kind: item.kind, type: 'put', at: item.at, record });
   }
-
   async function openOps(dataKey, items) {
     const opened = await Promise.all(items.map((item) => openOp(dataKey, item)));
     return opened.filter(Boolean);
   }
-
   /**
    * A room handover, decrypted and sorted into the two shapes the store
    * wants. Records that will not open are dropped rather than thrown on:
@@ -3131,7 +3083,6 @@ tbody tr:last-child td {
   async function openSnapshot(dataKey, items) {
     const puts = items.filter((item) => item && item.type === 'put');
     const opened = await Promise.all(puts.map((item) => openOp(dataKey, item)));
-
     const people = [];
     const expenses = [];
     let failed = 0;
@@ -3156,14 +3107,11 @@ tbody tr:last-child td {
   // Referer header on any link out of the page. So the id stays out of the
   // web server's access logs and out of anyone else's. Since the id is the
   // only thing standing between a stranger and the room, that matters.
-
   /** 160 bits, Crockford-ish base32. Minted by the server, never guessed. */
   const ROOM_ID = /^[a-z2-7]{32}$/;
-
   function isRoomId(value) {
     return typeof value === 'string' && ROOM_ID.test(value);
   }
-
   /** @param {string} hash location.hash, with or without the leading #. */
   function readRoomId(hash) {
     const raw = String(hash || '').replace(/^#/, '');
@@ -3172,14 +3120,12 @@ tbody tr:last-child td {
     const id = params.get('s');
     return isRoomId(id) ? id : null;
   }
-
   /** The link you send someone. Absolute, because it goes into a chat app. */
   function roomUrl(roomId, base) {
     const url = new URL(base);
     url.hash = 's=' + roomId;
     return url.toString();
   }
-
   /**
    * Where the sync API lives. Same origin as the page by default, which is
    * how it runs on a real domain: the site and the Worker share a hostname,
@@ -3195,18 +3141,14 @@ tbody tr:last-child td {
     if (!loc || loc.protocol === 'file:') return null;
     return loc.origin + '/api';
   }
-
   /** http(s) endpoint to the ws(s) one the socket needs. */
   function socketUrl(endpoint, roomId) {
     const url = new URL(endpoint + '/rooms/' + roomId + '/socket');
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     return url.toString();
   }
-
   // ------------------------------------------------------- rooms this device knows
-
   const MAX_REMEMBERED = 12;
-
   /**
    * Losing the link loses the room, so every room this browser has opened is
    * kept in a list it can offer back. It is a convenience, not a backup:
@@ -3216,7 +3158,6 @@ tbody tr:last-child td {
     const list = memory.read().rooms;
     return Array.isArray(list) ? list.filter((r) => r && isRoomId(r.id)) : [];
   }
-
   function rememberRoom(memory, roomId, patch = {}) {
     if (!isRoomId(roomId)) return knownRooms(memory);
     const rooms = knownRooms(memory).filter((r) => r.id !== roomId);
@@ -3230,7 +3171,6 @@ tbody tr:last-child td {
     memory.write(Object.assign(memory.read(), { rooms: kept }));
     return kept;
   }
-
   function forgetRoom(memory, roomId) {
     const kept = knownRooms(memory).filter((r) => r.id !== roomId);
     memory.write(Object.assign(memory.read(), { rooms: kept }));
@@ -3250,14 +3190,12 @@ tbody tr:last-child td {
   // Every op is an absolute write to one record, so re-sending a batch after
   // a connection dies mid-flight is harmless. That is the property the whole
   // retry story leans on: delivery only has to be at-least-once.
-
   const STATUS = {
     offline: 'offline',
     connecting: 'connecting',
     online: 'online',
     blocked: 'blocked',
   };
-
   /**
    * What a socket does when nothing is encrypting anything: hand the ops
    * through untouched. Only tests run this way. The app always passes a real
@@ -3268,13 +3206,11 @@ tbody tr:last-child td {
     openOps: async (ops) => ops,
     openSnapshot: async (items) => ({ people: [], expenses: [], items }),
   };
-
   const FIRST_RETRY_MS = 600;
   const MAX_RETRY_MS = 15000;
   const PING_EVERY_MS = 25000;
   /** No traffic at all for this long means the socket is dead but pretending. */
   const SILENCE_LIMIT_MS = 60000;
-
   /**
    * @param {object} config
    * @param {string} config.endpoint  e.g. "https://example.com/api"
@@ -3298,12 +3234,10 @@ tbody tr:last-child td {
       setTimer = (fn, ms) => setTimeout(fn, ms),
       clearTimer = (handle) => clearTimeout(handle),
     } = config;
-
     const queueStore = createStorage('common-expense-tracker/queue/' + roomId);
     /** @type {{seq: number, ops: object[]}[]} */
     let queue = loadQueue();
     let nextSeq = queue.reduce((max, batch) => Math.max(max, batch.seq), 0) + 1;
-
     let socket = null;
     let status = STATUS.offline;
     let attempt = 0;
@@ -3316,32 +3250,25 @@ tbody tr:last-child td {
     let incoming = null;
     /** Batch seqs already on the wire, so a flush does not send them twice. */
     const inFlight = new Set();
-
     function loadQueue() {
       const saved = queueStore.load();
       return Array.isArray(saved && saved.batches) ? saved.batches : [];
     }
-
     function saveQueue() {
       queueStore.save({ batches: queue });
     }
-
     function setStatus(next, detail = {}) {
       if (status === next && !detail.force) return;
       status = next;
       onStatus(next, Object.assign({ pending: pendingOps(), usage }, detail));
     }
-
     function pendingOps() {
       return queue.reduce((total, batch) => total + batch.ops.length, 0);
     }
-
     // ------------------------------------------------------------ connecting
-
     function connect() {
       if (stopped || !WebSocketImpl) return;
       if (socket && (socket.readyState === 0 || socket.readyState === 1)) return;
-
       setStatus(STATUS.connecting);
       let opened;
       try {
@@ -3351,7 +3278,6 @@ tbody tr:last-child td {
         return;
       }
       socket = opened;
-
       opened.onopen = () => {
         attempt = 0;
         lastMessageAt = now();
@@ -3359,7 +3285,6 @@ tbody tr:last-child td {
         flush();
         startPinging();
       };
-
       opened.onmessage = (event) => {
         lastMessageAt = now();
         let message;
@@ -3370,7 +3295,6 @@ tbody tr:last-child td {
         }
         handle(message);
       };
-
       opened.onclose = (event) => {
         stopPinging();
         // Whatever was mid-flight never got an ack, so it goes again.
@@ -3387,12 +3311,10 @@ tbody tr:last-child td {
           scheduleRetry();
         }
       };
-
       opened.onerror = () => {
         // onclose always follows, and that is where the retry lives.
       };
     }
-
     function scheduleRetry() {
       if (stopped || retryHandle) return;
       const base = Math.min(MAX_RETRY_MS, FIRST_RETRY_MS * Math.pow(2, attempt));
@@ -3405,7 +3327,6 @@ tbody tr:last-child td {
         connect();
       }, wait);
     }
-
     function startPinging() {
       stopPinging();
       pingHandle = setTimer(function beat() {
@@ -3420,12 +3341,10 @@ tbody tr:last-child td {
         pingHandle = setTimer(beat, PING_EVERY_MS);
       }, PING_EVERY_MS);
     }
-
     function stopPinging() {
       if (pingHandle) clearTimer(pingHandle);
       pingHandle = null;
     }
-
     function reconnectNow() {
       if (stopped) return;
       if (retryHandle) {
@@ -3443,9 +3362,7 @@ tbody tr:last-child td {
       }
       connect();
     }
-
     // -------------------------------------------------------------- messages
-
     function handle(message) {
       switch (message.type) {
         case 'hello':
@@ -3454,7 +3371,6 @@ tbody tr:last-child td {
           // last one lands. Half a room on screen would be worse than none.
           incoming = [];
           break;
-
         case 'records': {
           if (!incoming) incoming = [];
           for (const item of message.items || []) incoming.push(item);
@@ -3470,14 +3386,12 @@ tbody tr:last-child td {
           });
           break;
         }
-
         case 'ops':
           if (!Array.isArray(message.ops) || message.ops.length === 0) break;
           codec.openOps(message.ops).then((ops) => {
             if (ops.length > 0) onOps(ops);
           });
           break;
-
         case 'ack':
           usage = message.usage || usage;
           inFlight.delete(message.seq);
@@ -3485,7 +3399,6 @@ tbody tr:last-child td {
           saveQueue();
           setStatus(status, { force: true });
           break;
-
         case 'reject':
           usage = message.usage || usage;
           inFlight.delete(message.seq);
@@ -3496,16 +3409,13 @@ tbody tr:last-child td {
           // the room actually holds instead of showing a change nobody has.
           send({ type: 'resync' });
           break;
-
         case 'error':
           onNotice({ kind: 'error', message: message.message || '' });
           break;
-
         default:
           break;
       }
     }
-
     function send(message) {
       if (!socket || socket.readyState !== 1) return false;
       try {
@@ -3515,7 +3425,6 @@ tbody tr:last-child td {
         return false;
       }
     }
-
     /**
      * The queue holds plain ops and they are sealed on the way out, one
      * batch at a time. Sealing on send rather than on queue keeps push()
@@ -3550,15 +3459,12 @@ tbody tr:last-child td {
       }
       setStatus(status, { force: true });
     }
-
     // ----------------------------------------------------------------- public
-
     return {
       start() {
         stopped = false;
         connect();
       },
-
       stop() {
         stopped = true;
         stopPinging();
@@ -3574,7 +3480,6 @@ tbody tr:last-child td {
         socket = null;
         setStatus(STATUS.offline);
       },
-
       /** Queue local ops and try to send them. Never throws, never blocks. */
       push(ops) {
         if (!Array.isArray(ops) || ops.length === 0) return;
@@ -3584,17 +3489,14 @@ tbody tr:last-child td {
         saveQueue();
         flush();
       },
-
       /** Ask for the room again, e.g. after coming back from a long sleep. */
       resync() {
         if (!send({ type: 'resync' })) reconnectNow();
       },
-
       reconnect: reconnectNow,
       getStatus: () => status,
       getPending: pendingOps,
       getUsage: () => usage,
-
       /** Leaving a room for good: the unsent queue goes with it. */
       discardQueue() {
         queue = [];
@@ -3609,7 +3511,6 @@ tbody tr:last-child td {
 
   // Pure settlement math. No DOM, no storage, no imports from the UI.
   // All amounts in and out are integer minor units.
-
   /**
    * Split a total into n shares that sum back to exactly the total.
    * The remainder (at most n-1 minor units) goes one unit at a time to the
@@ -3626,7 +3527,6 @@ tbody tr:last-child td {
     const remainder = abs - base * n;
     return Array.from({ length: n }, (_, i) => sign * (base + (i < remainder ? 1 : 0)));
   }
-
   /**
    * Turn net balances into a short list of transfers.
    * Greedy largest-debtor to largest-creditor. That is not provably the
@@ -3645,7 +3545,6 @@ tbody tr:last-child td {
       .filter((b) => b.net > 0)
       .map((b) => ({ id: b.id, amount: b.net }))
       .sort((a, b) => b.amount - a.amount || (a.id < b.id ? -1 : 1));
-
     const transfers = [];
     let d = 0;
     let c = 0;
@@ -3661,7 +3560,6 @@ tbody tr:last-child td {
     }
     return transfers;
   }
-
   /**
    * Full picture for one month.
    * @param {{people: {id:string,name:string}[], expenses: {amount:number,payerId:string}[]}} month
@@ -3674,7 +3572,6 @@ tbody tr:last-child td {
   function computeSettlement(month) {
     const people = month.people ?? [];
     const expenses = month.expenses ?? [];
-
     const paidBy = new Map(people.map((p) => [p.id, 0]));
     let total = 0;
     for (const e of expenses) {
@@ -3683,20 +3580,16 @@ tbody tr:last-child td {
       total += e.amount;
       if (paidBy.has(e.payerId)) paidBy.set(e.payerId, paidBy.get(e.payerId) + e.amount);
     }
-
     if (people.length === 0) {
       return { total, people: [], transfers: [] };
     }
-
     const shares = splitEvenly(total, people.length);
     const rows = people.map((p, i) => {
       const paid = paidBy.get(p.id) ?? 0;
       return { id: p.id, name: p.name, paid, share: shares[i], net: paid - shares[i] };
     });
-
     return { total, people: rows, transfers: minimizeTransfers(rows) };
   }
-
   /**
    * Geometry for the balance bar. The bar is the whole month's spending laid
    * out left to right. Each person gets a slice as wide as what they paid,
@@ -3722,20 +3615,17 @@ tbody tr:last-child td {
     const total = settlement?.total ?? 0;
     const empty = { total, segments: [], ticks: [], crossing: null };
     if (people.length === 0 || total <= 0) return empty;
-
     // Overpayers first, biggest first; the deepest debtor ends up on the far
     // right. Ties keep roster order so the bar does not reshuffle itself
     // every time an expense is added.
     const order = people
       .map((person, colorIndex) => ({ ...person, colorIndex }))
       .sort((a, b) => b.net - a.net || a.colorIndex - b.colorIndex);
-
     const segments = [];
     const ticks = [];
     let crossing = null;
     let paidSoFar = 0;
     let shareSoFar = 0;
-
     for (let i = 0; i < order.length; i += 1) {
       const person = order[i];
       segments.push({
@@ -3751,10 +3641,8 @@ tbody tr:last-child td {
         // and the leftover just reads as an unclaimed tail.
         width: person.paid / total,
       });
-
       paidSoFar += person.paid;
       shareSoFar += person.share;
-
       // Nets always sum to zero or less, so the last slice is never an
       // overpayer and there is always a tick to hang the crossing on.
       const isLast = i === order.length - 1;
@@ -3768,7 +3656,6 @@ tbody tr:last-child td {
       }
       if (!isLast) ticks.push({ at: shareSoFar / total, isCrossing: crossesHere });
     }
-
     return { total, segments, ticks, crossing };
   }
 
@@ -3783,15 +3670,12 @@ tbody tr:last-child td {
   // has names anyway, the roster already forbids two people sharing one, and
   // a name survives being edited by hand in a spreadsheet where a uuid does
   // not.
-
   const FILE_TAG = 'common-expense-tracker';
   const FORMAT_VERSION = 1;
-
   // Column order of an exported CSV. The importer matches on the header
   // names below, not on position, so a spreadsheet that reorders columns
   // still comes back in.
   const CSV_HEADER = ['month', 'date', 'description', 'paid_by', 'amount_ron'];
-
   // What each column may be called in a file somebody else made.
   const CSV_ALIASES = {
     month: ['month', 'luna', 'period'],
@@ -3800,9 +3684,7 @@ tbody tr:last-child td {
     paid_by: ['paid_by', 'payer', 'paidby', 'who_paid', 'who', 'paid', 'platit_de'],
     amount_ron: ['amount_ron', 'amount', 'sum', 'value', 'total', 'suma', 'ron'],
   };
-
   // --------------------------------------------------------------- exporting
-
   /** Month ids that hold at least one expense, oldest first. */
   function exportableMonths(state) {
     return Object.values(state?.months ?? {})
@@ -3811,12 +3693,10 @@ tbody tr:last-child td {
       .filter((id) => parseMonthId(id))
       .sort();
   }
-
   function collect(state, monthIds) {
     const wanted = new Set(monthIds ?? []);
     const nameById = new Map((state?.people ?? []).map((p) => [p.id, p.name]));
     const ids = exportableMonths(state).filter((id) => wanted.has(id));
-
     return ids.map((id) => ({
       id,
       expenses: [...(state.months[id].expenses ?? [])]
@@ -3829,11 +3709,9 @@ tbody tr:last-child td {
         })),
     }));
   }
-
   function toJSON(state, monthIds, now = new Date()) {
     const months = {};
     for (const month of collect(state, monthIds)) months[month.id] = { expenses: month.expenses };
-
     return (
       JSON.stringify(
         {
@@ -3852,12 +3730,10 @@ tbody tr:last-child td {
       ) + '\n'
     );
   }
-
   function csvCell(value) {
     const text = String(value ?? '');
     return /[",\r\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
   }
-
   function toCSV(state, monthIds) {
     const lines = [CSV_HEADER.join(',')];
     for (const month of collect(state, monthIds)) {
@@ -3871,15 +3747,12 @@ tbody tr:last-child td {
     }
     return lines.join('\r\n') + '\r\n';
   }
-
   /** Ready-to-download file for the chosen months. */
   function buildExport(state, monthIds, format, now = new Date()) {
     const ids = exportableMonths(state).filter((id) => (monthIds ?? []).includes(id));
     if (ids.length === 0) return { ok: false, error: 'Pick at least one month to export.' };
-
     const stem = ids.length === 1 ? ids[0] : ids[0] + '-to-' + ids[ids.length - 1];
     const csv = format === 'csv';
-
     return {
       ok: true,
       filename: 'expenses-' + stem + (csv ? '.csv' : '.json'),
@@ -3887,13 +3760,10 @@ tbody tr:last-child td {
       text: csv ? toCSV(state, ids) : toJSON(state, ids, now),
     };
   }
-
   // --------------------------------------------------------------- importing
-
   function stripBom(text) {
     return String(text ?? '').replace(/^\uFEFF/, '');
   }
-
   /**
    * Read a file the user picked. Both formats normalise to the same shape:
    *
@@ -3906,7 +3776,6 @@ tbody tr:last-child td {
     if (!clean) return { ok: false, error: 'That file is empty.' };
     return /^[{[]/.test(clean) ? parseJsonPayload(clean) : parseCsvPayload(clean);
   }
-
   function parseJsonPayload(text) {
     let raw;
     try {
@@ -3919,7 +3788,6 @@ tbody tr:last-child td {
     }
     const rawMonths = raw.months && typeof raw.months === 'object' ? raw.months : null;
     if (!rawMonths) return { ok: false, error: 'That file has no months in it.' };
-
     // A raw copy of what the app saves is a valid import too: there, people
     // are {id, name} objects and expenses carry payerId. Accept that shape
     // alongside the tidy exported one.
@@ -3933,7 +3801,6 @@ tbody tr:last-child td {
         if (typeof person.id === 'string') nameById.set(person.id, person.name.trim());
       }
     }
-
     const months = {};
     for (const [id, month] of Object.entries(rawMonths)) {
       if (!parseMonthId(id)) continue;
@@ -3942,7 +3809,6 @@ tbody tr:last-child td {
         : Array.isArray(month?.expenses)
           ? month.expenses
           : [];
-
       const expenses = [];
       for (const e of list) {
         if (!e || typeof e !== 'object') continue;
@@ -3960,17 +3826,14 @@ tbody tr:last-child td {
       }
       months[id] = expenses;
     }
-
     if (Object.keys(months).length === 0) {
       return { ok: false, error: 'No month in that file could be read.' };
     }
     return { ok: true, people, months, skipped: [] };
   }
-
   function pick(value) {
     return typeof value === 'string' && value.trim() ? value.trim() : '';
   }
-
   /**
    * Amounts are integer bani. A hand-edited file with 42.5 in it means lei,
    * so take that reading instead of throwing the row away.
@@ -3986,30 +3849,24 @@ tbody tr:last-child td {
     }
     return null;
   }
-
   function readDate(value) {
     return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';
   }
-
   // ------------------------------------------------------------------ CSV in
-
   /** Whichever of these appears most often on the header line wins. */
   function sniffDelimiter(firstLine) {
     const counts = [',', ';', '\t'].map((d) => [d, firstLine.split(d).length - 1]);
     counts.sort((a, b) => b[1] - a[1]);
     return counts[0][1] > 0 ? counts[0][0] : ',';
   }
-
   /** RFC 4180 rows: quoted fields, doubled quotes, newlines inside quotes. */
   function parseCsvRows(text, delimiter) {
     const rows = [];
     let row = [];
     let field = '';
     let quoted = false;
-
     for (let i = 0; i < text.length; i += 1) {
       const ch = text[i];
-
       if (quoted) {
         if (ch !== '"') {
           field += ch;
@@ -4021,7 +3878,6 @@ tbody tr:last-child td {
         }
         continue;
       }
-
       if (ch === '"' && field === '') {
         quoted = true;
       } else if (ch === delimiter) {
@@ -4036,12 +3892,10 @@ tbody tr:last-child td {
         field += ch;
       }
     }
-
     row.push(field);
     rows.push(row);
     return rows.filter((r) => r.some((cell) => cell.trim() !== ''));
   }
-
   function normaliseHeader(cell) {
     return cell
       .trim()
@@ -4049,18 +3903,15 @@ tbody tr:last-child td {
       .replace(/[\s-]+/g, '_')
       .replace(/[^a-z_]/g, '');
   }
-
   function parseCsvPayload(text) {
     const firstLine = text.split(/\r?\n/, 1)[0] ?? '';
     const rows = parseCsvRows(text, sniffDelimiter(firstLine));
     if (rows.length === 0) return { ok: false, error: 'That file is empty.' };
-
     const header = rows[0].map(normaliseHeader);
     const column = {};
     for (const [key, aliases] of Object.entries(CSV_ALIASES)) {
       column[key] = header.findIndex((cell) => aliases.includes(cell));
     }
-
     if (column.amount_ron === -1 || column.paid_by === -1) {
       return {
         ok: false,
@@ -4070,34 +3921,28 @@ tbody tr:last-child td {
     if (column.month === -1 && column.date === -1) {
       return { ok: false, error: 'That CSV needs either a month column or a date column.' };
     }
-
     const months = {};
     const skipped = [];
-
     for (let i = 1; i < rows.length; i += 1) {
       const cells = rows[i];
       const at = (index) => (index === -1 ? '' : (cells[index] ?? '').trim());
       const line = i + 1;
-
       const date = at(column.date);
       const monthId = at(column.month) || date.slice(0, 7);
       if (!parseMonthId(monthId)) {
         skipped.push('line ' + line + ': "' + (at(column.month) || date) + '" is not a month');
         continue;
       }
-
       const amount = parseAmount(at(column.amount_ron));
       if (amount === null || amount <= 0) {
         skipped.push('line ' + line + ': "' + at(column.amount_ron) + '" is not an amount');
         continue;
       }
-
       const paidBy = at(column.paid_by);
       if (!paidBy) {
         skipped.push('line ' + line + ': nobody is named as the payer');
         continue;
       }
-
       if (!months[monthId]) months[monthId] = [];
       months[monthId].push({
         amount,
@@ -4106,7 +3951,6 @@ tbody tr:last-child td {
         description: at(column.description),
       });
     }
-
     if (Object.keys(months).length === 0) {
       return {
         ok: false,
@@ -4115,9 +3959,7 @@ tbody tr:last-child td {
     }
     return { ok: true, people: [], months, skipped };
   }
-
   // -------------------------------------------------------- what will change
-
   /**
    * What the merge is about to do, so the confirm dialog can spell it out
    * before anything is overwritten.
@@ -4126,7 +3968,6 @@ tbody tr:last-child td {
     const known = new Set((state?.people ?? []).map((p) => p.name.toLowerCase()));
     const seen = new Set();
     const newPeople = [];
-
     const names = [...(payload.people ?? [])];
     for (const expenses of Object.values(payload.months)) {
       for (const e of expenses) names.push(e.paidBy);
@@ -4138,11 +3979,9 @@ tbody tr:last-child td {
       seen.add(key);
       newPeople.push(name);
     }
-
     const ids = Object.keys(payload.months)
       .filter((id) => parseMonthId(id))
       .sort();
-
     const months = ids.map((id) => ({
       id,
       label: monthLabel(id),
@@ -4150,12 +3989,10 @@ tbody tr:last-child td {
       existing: state?.months?.[id]?.expenses?.length ?? 0,
       total: payload.months[id].reduce((sum, e) => sum + e.amount, 0),
     }));
-
     const untouched = Object.values(state?.months ?? {})
       .filter((m) => m.expenses.length > 0 && !ids.includes(m.id))
       .map((m) => m.id)
       .sort();
-
     return {
       months,
       newPeople,
@@ -4170,21 +4007,17 @@ tbody tr:last-child td {
 
   /** The switch has two positions and nothing else. */
   const THEMES = ['light', 'dark'];
-
   function newId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
     return 'id-' + Math.random().toString(36).slice(2) + '-' + Date.now().toString(36);
   }
-
   function emptyMonth(id) {
     return { id, expenses: [] };
   }
-
   function cleanPeople(raw) {
     const people = [];
     const seenIds = new Set();
     const seenNames = new Set();
-
     for (const person of Array.isArray(raw) ? raw : []) {
       if (!person || typeof person.id !== 'string' || typeof person.name !== 'string') continue;
       const name = person.name.trim();
@@ -4196,7 +4029,6 @@ tbody tr:last-child td {
     }
     return people;
   }
-
   /**
    * Drop anything that does not look like our data instead of trusting the
    * blob. Version 1 kept a separate list of people inside every month; those
@@ -4211,11 +4043,9 @@ tbody tr:last-child td {
     }
     const people = cleanPeople([...(Array.isArray(raw?.people) ? raw.people : []), ...carriedOver]);
     const known = new Set(people.map((p) => p.id));
-
     const months = {};
     for (const [id, month] of Object.entries(rawMonths)) {
       if (!parseMonthId(id) || !month || typeof month !== 'object') continue;
-
       const expenses = Array.isArray(month.expenses)
         ? month.expenses
             .filter(
@@ -4234,10 +4064,8 @@ tbody tr:last-child td {
               date: typeof e.date === 'string' ? e.date : '',
             }))
         : [];
-
       months[id] = { id, expenses };
     }
-
     const current =
       raw && parseMonthId(raw.currentMonthId) ? raw.currentMonthId : currentMonthId();
     const theme = raw && THEMES.includes(raw.theme) ? raw.theme : defaultTheme;
@@ -4246,7 +4074,6 @@ tbody tr:last-child td {
     const settlementOpen = raw ? raw.settlementOpen === true : false;
     return { version: 3, currentMonthId: current, theme, settlementOpen, people, months };
   }
-
   /**
    * @param {{load: Function, save: Function}} storage
    * @param {{defaultTheme?: 'light'|'dark', onOps?: (ops: object[]) => void}} options
@@ -4260,31 +4087,24 @@ tbody tr:last-child td {
   function createStore(storage = createStorage(), options = {}) {
     const defaultTheme = THEMES.includes(options.defaultTheme) ? options.defaultTheme : 'light';
     const emit = typeof options.onOps === 'function' ? options.onOps : () => {};
-
     let backend = storage;
     let state = sanitize(backend.load(), defaultTheme);
-
     const listeners = new Set();
-
     function ensureCurrentMonth() {
       if (!state.months[state.currentMonthId]) {
         state.months[state.currentMonthId] = emptyMonth(state.currentMonthId);
       }
     }
-
     ensureCurrentMonth();
-
     function notify() {
       for (const fn of listeners) fn(state);
     }
-
     /** @param {object[]} [ops] the shared changes this commit represents. */
     function commit(ops) {
       backend.save(state);
       if (ops && ops.length > 0) emit(ops);
       notify();
     }
-
     /**
      * Read-write handle on one month, created on demand and always empty:
      * nobody gets people or expenses they did not enter.
@@ -4293,32 +4113,25 @@ tbody tr:last-child td {
       if (!state.months[id]) state.months[id] = emptyMonth(id);
       return state.months[id];
     }
-
     function everyExpense() {
       return Object.values(state.months).flatMap((m) => m.expenses);
     }
-
     function monthIdOf(expenseId) {
       for (const month of Object.values(state.months)) {
         if (month.expenses.some((e) => e.id === expenseId)) return month.id;
       }
       return null;
     }
-
     return {
       subscribe(fn) {
         listeners.add(fn);
         return () => listeners.delete(fn);
       },
-
       getState: () => state,
       getCurrentMonth: () => monthOf(state.currentMonthId),
-
       /** One roster shared by every month. */
       getPeople: () => state.people,
-
       // --------------------------------------------------------- sync inbound
-
       /**
        * Ops the server accepted, from this device or the other one. They are
        * already resolved, so they land as they are and never come back out
@@ -4331,7 +4144,6 @@ tbody tr:last-child td {
         if (changed) notify();
         return changed;
       },
-
       /**
        * A whole room, as sent on connect. Replaces the shared half and keeps
        * this device's private half untouched.
@@ -4343,12 +4155,10 @@ tbody tr:last-child td {
         notify();
         return { ok: true };
       },
-
       /** Everything here, as the ops that would recreate it in a room. */
       toOps() {
         return stateToOps(state);
       },
-
       /**
        * Ops that came from this device but not from one of the methods
        * below: moving your own months into a room is the only case. They
@@ -4361,7 +4171,6 @@ tbody tr:last-child td {
         commit(ops);
         return { ok: true, ops: ops.length };
       },
-
       /**
        * Point the store at different storage, for moving between this
        * device's own data and a room. The theme follows you across, because
@@ -4373,22 +4182,18 @@ tbody tr:last-child td {
         ensureCurrentMonth();
         notify();
       },
-
       // ----------------------------------------------- private to this device
-
       setTheme(theme) {
         if (!THEMES.includes(theme)) return { ok: false, error: 'Unknown theme.' };
         state.theme = theme;
         commit();
         return { ok: true };
       },
-
       setSettlementOpen(open) {
         state.settlementOpen = open === true;
         commit();
         return { ok: true };
       },
-
       goToMonth(id) {
         if (!parseMonthId(id)) return { ok: false, error: 'That is not a valid month.' };
         // Switching never rewrites the month we are leaving: every month is
@@ -4398,9 +4203,7 @@ tbody tr:last-child td {
         commit();
         return { ok: true };
       },
-
       // ------------------------------------------------------ shared changes
-
       /**
        * Merge a parsed file in. Only the months named in the payload are
        * touched, and each of those is replaced wholesale: a file holding
@@ -4416,10 +4219,8 @@ tbody tr:last-child td {
         if (!rawMonths || typeof rawMonths !== 'object') {
           return { ok: false, error: 'There is nothing in that file to import.' };
         }
-
         const ids = Object.keys(rawMonths).filter((id) => parseMonthId(id));
         if (ids.length === 0) return { ok: false, error: 'That file has no months in it.' };
-
         const ops = [];
         const idByName = new Map(state.people.map((p) => [p.name.toLowerCase(), p.id]));
         const ensurePerson = (rawName) => {
@@ -4433,9 +4234,7 @@ tbody tr:last-child td {
           ops.push(putPerson(person));
           return person.id;
         };
-
         for (const name of Array.isArray(payload.people) ? payload.people : []) ensurePerson(name);
-
         let imported = 0;
         for (const id of ids) {
           // The month is replaced, so everything already in it goes. In a
@@ -4444,7 +4243,6 @@ tbody tr:last-child td {
           for (const gone of state.months[id] ? state.months[id].expenses : []) {
             ops.push(delExpense(gone.id));
           }
-
           const expenses = [];
           for (const e of rawMonths[id]) {
             if (!e || !Number.isInteger(e.amount) || e.amount <= 0) continue;
@@ -4463,16 +4261,13 @@ tbody tr:last-child td {
           state.months[id] = { id, expenses };
           imported += expenses.length;
         }
-
         // Land on something the user can actually see the result of.
         const newest = ids.slice().sort().pop();
         if (!ids.includes(state.currentMonthId) && newest) state.currentMonthId = newest;
         monthOf(state.currentMonthId);
-
         commit(ops);
         return { ok: true, months: ids.length, expenses: imported };
       },
-
       addPerson(rawName) {
         const name = String(rawName == null ? '' : rawName).trim();
         if (!name) return { ok: false, error: 'Enter a name.' };
@@ -4485,7 +4280,6 @@ tbody tr:last-child td {
         commit([putPerson(person)]);
         return { ok: true, person };
       },
-
       renamePerson(personId, rawName) {
         const name = String(rawName == null ? '' : rawName).trim();
         if (!name) return { ok: false, error: 'Enter a name.' };
@@ -4500,7 +4294,6 @@ tbody tr:last-child td {
         commit([putPerson(person)]);
         return { ok: true };
       },
-
       /**
        * Removing someone affects every month they ever paid in, not just the
        * one on screen, so the counts come back for the dialog to spell out.
@@ -4510,7 +4303,6 @@ tbody tr:last-child td {
       removePerson(personId, options = {}) {
         const person = state.people.find((p) => p.id === personId);
         if (!person) return { ok: false, error: 'That person is no longer on the list.' };
-
         const ops = [];
         const theirs = everyExpense().filter((e) => e.payerId === personId);
         if (theirs.length > 0) {
@@ -4545,13 +4337,11 @@ tbody tr:last-child td {
             };
           }
         }
-
         state.people = state.people.filter((p) => p.id !== personId);
         ops.push(delPerson(personId));
         commit(ops);
         return { ok: true };
       },
-
       addExpense(input) {
         const validated = validateExpense(input, state.people);
         if (!validated.ok) return validated;
@@ -4561,7 +4351,6 @@ tbody tr:last-child td {
         commit([putExpense(monthId, expense)]);
         return { ok: true, expense };
       },
-
       updateExpense(expenseId, input) {
         const month = monthOf(state.currentMonthId);
         const index = month.expenses.findIndex((e) => e.id === expenseId);
@@ -4573,7 +4362,6 @@ tbody tr:last-child td {
         commit([putExpense(month.id, expense)]);
         return { ok: true };
       },
-
       deleteExpense(expenseId) {
         const monthId = monthIdOf(expenseId) || state.currentMonthId;
         const month = monthOf(monthId);
@@ -4587,7 +4375,6 @@ tbody tr:last-child td {
       },
     };
   }
-
   /** Shared by add and update so both reject the same things. */
   function validateExpense(input, people) {
     const amount = input && input.amount;
@@ -4626,7 +4413,6 @@ tbody tr:last-child td {
   // hands out a wrapped key to anyone who asks, because without the password
   // that blob is noise. Once a device unwraps it, it keeps the key, which is
   // what "type it once per device" means.
-
   /** Where this device is, as far as sharing goes. */
   const MODE = {
     /** Your own months. No room, no socket, nothing leaves the browser. */
@@ -4636,9 +4422,7 @@ tbody tr:last-child td {
     /** In a room, key in hand. */
     room: 'room',
   };
-
   const keyStoreFor = (roomId) => createStorage('common-expense-tracker/key/' + roomId);
-
   function createSharing(config) {
     const {
       store,
@@ -4649,9 +4433,7 @@ tbody tr:last-child td {
       loc = typeof location === 'undefined' ? null : location,
       request = typeof fetch === 'undefined' ? null : fetch,
     } = config;
-
     const available = endpoint !== null && canEncrypt();
-
     let sync = null;
     let mode = MODE.local;
     let roomId = null;
@@ -4659,7 +4441,6 @@ tbody tr:last-child td {
     let dataKey = null;
     let status = STATUS.offline;
     let usage = null;
-
     function report(extra = {}) {
       onStatus(
         Object.assign(
@@ -4675,13 +4456,10 @@ tbody tr:last-child td {
         )
       );
     }
-
     // ------------------------------------------------------- the cached key
-
     async function rememberKey(id, key) {
       keyStoreFor(id).save({ key: toBase64(await exportDataKey(key)), savedAt: Date.now() });
     }
-
     async function recallKey(id) {
       const saved = keyStoreFor(id).load();
       if (!saved || typeof saved.key !== 'string') return null;
@@ -4691,15 +4469,12 @@ tbody tr:last-child td {
         return null;
       }
     }
-
     // --------------------------------------------------------- the API calls
-
     async function api(path, options) {
       const response = await request(endpoint + path, options);
       const payload = await response.json().catch(() => null);
       return { ok: response.ok, status: response.status, payload };
     }
-
     async function fetchLock(id) {
       try {
         const { ok, payload } = await api('/rooms/' + id + '/lock', { method: 'GET' });
@@ -4709,9 +4484,7 @@ tbody tr:last-child td {
         return null;
       }
     }
-
     // ------------------------------------------------------------ connecting
-
     function codec() {
       return {
         sealOps: (ops) => sealOps(dataKey, ops),
@@ -4719,7 +4492,6 @@ tbody tr:last-child td {
         openSnapshot: (items) => openSnapshot(dataKey, items),
       };
     }
-
     function connect(id) {
       sync = createSync({
         endpoint,
@@ -4751,7 +4523,6 @@ tbody tr:last-child td {
       });
       sync.start();
     }
-
     /** Point the app at a room: different storage, different data, same screen. */
     function enter(id, key) {
       if (sync) sync.stop();
@@ -4767,7 +4538,6 @@ tbody tr:last-child td {
       report();
       return { ok: true, roomId: id };
     }
-
     return {
       isAvailable: () => available,
       getMode: () => mode,
@@ -4776,13 +4546,11 @@ tbody tr:last-child td {
       getStatus: () => status,
       getUsage: () => usage,
       getPending: () => (sync ? sync.getPending() : 0),
-
       /** The link to send someone. It carries no key and no password. */
       getLink(id = roomId || pendingRoomId) {
         if (!id || !loc) return '';
         return roomUrl(id, loc.href.split('#')[0]);
       },
-
       /**
        * Ops from local changes. Dropped on the floor when there is no room,
        * which is what makes the whole app work unchanged on its own.
@@ -4790,7 +4558,6 @@ tbody tr:last-child td {
       push(ops) {
         if (sync) sync.push(ops);
       },
-
       /**
        * Read the URL. A room this device already knows opens straight away;
        * one it does not needs the password first.
@@ -4803,19 +4570,16 @@ tbody tr:last-child td {
           report();
           return { mode, roomId: null };
         }
-
         const key = await recallKey(id);
         if (key) {
           enter(id, key);
           return { mode, roomId: id };
         }
-
         pendingRoomId = id;
         mode = MODE.locked;
         report();
         return { mode, roomId: id };
       },
-
       /**
        * Turn a password into the key for the room in the URL. Wrong ones
        * fail here and nowhere else: AES-GCM will not open a blob with the
@@ -4832,7 +4596,6 @@ tbody tr:last-child td {
         await rememberKey(id, key);
         return enter(id, key);
       },
-
       /** The way back in when the password is gone but the paper is not. */
       async unlockWithRecoveryKey(text, id = pendingRoomId) {
         if (!id) return { ok: false, error: 'There is no tracker to unlock.' };
@@ -4841,7 +4604,6 @@ tbody tr:last-child td {
         await rememberKey(id, key);
         return enter(id, key);
       },
-
       /**
        * Ask the server for a room. The key is made here and the password
        * never goes anywhere: the server is handed a blob it cannot open and
@@ -4854,10 +4616,8 @@ tbody tr:last-child td {
         if (!password || password.length < 8) {
           return { ok: false, error: 'Use a password of at least 8 characters.' };
         }
-
         const key = await generateDataKey();
         const lock = await createLock(key, password);
-
         let result;
         try {
           result = await api('/rooms', {
@@ -4868,19 +4628,16 @@ tbody tr:last-child td {
         } catch {
           return { ok: false, error: 'Could not reach the server. Check your connection.' };
         }
-
         const payload = result.payload;
         if (!payload || !payload.ok || !isRoomId(payload.roomId)) {
           return { ok: false, error: codeError(payload && payload.error) };
         }
-
         await rememberKey(payload.roomId, key);
         const entered = enter(payload.roomId, key);
         // Shown once, and only here. After this the key exists in two places
         // that both burn with the browser profile.
         return Object.assign(entered, { recoveryKey: await toRecoveryKey(key) });
       },
-
       /**
        * Re-wrap the same data key with a new password. Everything already in
        * the room stays readable, and other devices keep working because
@@ -4905,11 +4662,9 @@ tbody tr:last-child td {
         }
         return { ok: true };
       },
-
       async getRecoveryKey() {
         return dataKey ? toRecoveryKey(dataKey) : '';
       },
-
       /**
        * Back to this device's own months. The room is untouched and the link
        * still works; this browser just stops watching it.
@@ -4932,13 +4687,11 @@ tbody tr:last-child td {
         mode = MODE.local;
         status = STATUS.offline;
         usage = null;
-
         if (options.forget) {
           createStorage(roomKey(leaving)).clear();
           keyStoreFor(leaving).clear();
           forgetRoom(memory, leaving);
         }
-
         store.rebind(createStorage(LOCAL_KEY));
         if (loc) {
           // Clear the fragment without leaving a bare # in the address bar.
@@ -4952,7 +4705,6 @@ tbody tr:last-child td {
         report();
         return { ok: true, roomId: leaving };
       },
-
       /**
        * Everything in this device's own months, as ops. Offered when you
        * land in an empty room: it is your data and the room is yours, so
@@ -4962,27 +4714,142 @@ tbody tr:last-child td {
       localOps() {
         return createStore(createStorage(LOCAL_KEY)).toOps();
       },
-
       moveLocalDataIn() {
         if (mode !== MODE.room) return { ok: false, error: 'Not in a shared tracker.' };
         const ops = this.localOps();
         if (ops.length === 0) return { ok: false, error: 'There is nothing here to move.' };
         return store.ingestOps(ops);
       },
-
       knownRoom: (id) => keyStoreFor(id).load() !== null,
       resync: () => sync && sync.resync(),
       reconnect: () => sync && sync.reconnect(),
       report,
     };
   }
-
   function codeError(error) {
     if (error === 'used_code') return 'That code has already been used.';
     if (error === 'rate') return 'Too many tries. Wait an hour and try again.';
     if (error === 'bad_code') return 'That code is not one of ours.';
     if (error === 'bad_lock') return 'The browser could not lock the tracker. Try again.';
     return 'The server refused that. Check the code and try again.';
+  }
+
+  // ==================================================================
+  // src/access.js
+
+  // Asking for an invite code, from the browser that will use it.
+  //
+  // The request carries a name and a line about who is asking, nothing more.
+  // The server answers with an id and a secret, and this browser keeps both.
+  // Coming back later, it asks how the request went; once it is approved,
+  // the answer carries the code and the Share dialog fills it in. The code
+  // never has to travel by email, and the server never learns an address.
+
+  const ACCESS_KEY = 'common-expense-tracker/access-request';
+  const ACCESS_LIMITS = { name: 60, message: 500 };
+
+  const ACCESS = {
+    none: 'none',
+    pending: 'pending',
+    approved: 'approved',
+    declined: 'declined',
+  };
+
+  /**
+   * @param {{ endpoint: string, request?: Function, storage?: ReturnType<typeof createStorage> }} config
+   */
+  function createAccessRequests(config) {
+    const {
+      endpoint,
+      request = typeof fetch === 'undefined' ? null : fetch,
+      storage = createStorage(ACCESS_KEY),
+    } = config;
+
+    async function post(path, body) {
+      const response = await request(endpoint + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json().catch(() => null);
+      return { ok: response.ok, status: response.status, payload: payload || {} };
+    }
+
+    function saved() {
+      const value = storage.load();
+      return value && typeof value.id === 'string' && typeof value.secret === 'string' ? value : null;
+    }
+
+    return {
+      /** What this browser last knew, without asking the server. */
+      current() {
+        const value = saved();
+        if (!value) return { status: ACCESS.none };
+        return { status: value.status || ACCESS.pending, sentAt: value.sentAt, code: value.code || null };
+      },
+
+      async send(name, message) {
+        const cleanName = String(name || '').trim().slice(0, ACCESS_LIMITS.name);
+        const cleanMessage = String(message || '').trim().slice(0, ACCESS_LIMITS.message);
+        if (!cleanMessage) return { ok: false, error: 'Say who you are and who you will share it with.' };
+
+        let answer;
+        try {
+          answer = await post('/requests', { name: cleanName, message: cleanMessage });
+        } catch {
+          return { ok: false, error: 'Could not reach the server. Check the connection and try again.' };
+        }
+        if (!answer.ok) return { ok: false, error: requestError(answer.payload.error) };
+
+        storage.save({
+          id: answer.payload.id,
+          secret: answer.payload.secret,
+          sentAt: Date.now(),
+          status: ACCESS.pending,
+          code: null,
+        });
+        return { ok: true };
+      },
+
+      /** Ask the server how the request went, and remember the answer. */
+      async check() {
+        const value = saved();
+        if (!value) return { status: ACCESS.none };
+
+        let answer;
+        try {
+          answer = await post('/requests/status', { id: value.id, secret: value.secret });
+        } catch {
+          // Offline: say what we knew last.
+          return this.current();
+        }
+        if (answer.status === 404) {
+          // Swept after 30 days, or the server was reset. Either way it is gone.
+          storage.clear();
+          return { status: ACCESS.none, expired: true };
+        }
+        if (!answer.ok) return this.current();
+
+        const status = Object.values(ACCESS).includes(answer.payload.status)
+          ? answer.payload.status
+          : ACCESS.pending;
+        const next = Object.assign({}, value, { status, code: answer.payload.code || null });
+        storage.save(next);
+        return { status, sentAt: next.sentAt, code: next.code };
+      },
+
+      /** Done with it: the code was used, or a decline was read. */
+      forget() {
+        storage.clear();
+      },
+    };
+  }
+
+  function requestError(error) {
+    if (error === 'rate') return 'You have sent a few requests today already. Try again tomorrow.';
+    if (error === 'busy') return 'Too many requests are waiting right now. Try again in a few days.';
+    if (error === 'bad_request') return 'Say who you are and who you will share it with.';
+    return 'The server did not take that request. Try again later.';
   }
 
   // ==================================================================
@@ -5118,6 +4985,14 @@ tbody tr:last-child td {
     newPasswordAgain: $('new-password-again'),
     createRoomBtn: $('create-room-btn'),
     createError: $('create-error'),
+
+    accessStatus: $('access-status'),
+    accessToggle: $('access-toggle'),
+    accessForm: $('access-form'),
+    accessName: $('access-name'),
+    accessMessage: $('access-message'),
+    accessSend: $('access-send'),
+    accessError: $('access-error'),
 
     joinRoomForm: $('join-room-form'),
     joinLink: $('join-link'),
@@ -6423,11 +6298,70 @@ tbody tr:last-child td {
   function openShareDialog() {
     showError(el.createError, '');
     showError(el.joinError, '');
+    showError(el.accessError, '');
     el.joinLink.value = '';
     localOpCount = sharing.isAvailable() ? sharing.localOps().length : 0;
     renderShareDialog();
     el.shareDialog.showModal();
+    if (sharing.isAvailable() && shareState.mode !== MODE.room) void refreshAccess();
   }
+
+  // ------------------------------------------------- asking for a code
+
+  const accessRequests = (() => {
+    const endpoint = syncEndpoint(document, window.location);
+    return endpoint ? createAccessRequests({ endpoint }) : null;
+  })();
+
+  /** Ask the server how this browser's request went, then show it. */
+  async function refreshAccess() {
+    if (!accessRequests) return;
+    renderAccess(accessRequests.current());
+    if (accessRequests.current().status === ACCESS.none) return;
+    renderAccess(await accessRequests.check());
+  }
+
+  function renderAccess(state) {
+    const status = state.status;
+    el.accessToggle.hidden = status === ACCESS.pending || status === ACCESS.approved;
+    if (status !== ACCESS.none) el.accessForm.hidden = true;
+
+    let message = '';
+    if (status === ACCESS.pending) {
+      message =
+        'Request sent ' +
+        (state.sentAt ? shortDay(state.sentAt) : '') +
+        '. It is waiting for approval; check back here in this browser.';
+    } else if (status === ACCESS.approved) {
+      message = 'Your request was approved and the code is filled in. Pick a password and create the tracker.';
+      if (state.code && !el.inviteCode.value.trim()) el.inviteCode.value = state.code;
+    } else if (status === ACCESS.declined) {
+      message = 'Your request was not approved.';
+      // Read once, then let them ask again.
+      accessRequests.forget();
+    } else if (state.expired) {
+      message = 'Your earlier request expired. You can send a new one.';
+    }
+    el.accessStatus.textContent = message;
+    el.accessStatus.hidden = message === '';
+  }
+
+  el.accessToggle.addEventListener('click', () => {
+    el.accessForm.hidden = !el.accessForm.hidden;
+    if (!el.accessForm.hidden) el.accessName.focus();
+  });
+
+  el.accessForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!accessRequests) return;
+    showError(el.accessError, '');
+    const done = busy(el.accessSend, 'Sending…');
+    const result = await accessRequests.send(el.accessName.value, el.accessMessage.value);
+    done();
+    if (!result.ok) return showError(el.accessError, result.error);
+    el.accessForm.reset();
+    renderAccess(accessRequests.current());
+  });
 
   el.openShare.addEventListener('click', openShareDialog);
 
@@ -6454,6 +6388,11 @@ tbody tr:last-child td {
 
     if (!result.ok) return showError(el.createError, result.error);
 
+    // The approved code is spent now, so the request has done its job.
+    if (accessRequests && accessRequests.current().code === code) {
+      accessRequests.forget();
+      renderAccess({ status: ACCESS.none });
+    }
     el.createRoomForm.reset();
     el.shareDialog.close('cancel');
     showRecoveryKey(result.recoveryKey, {

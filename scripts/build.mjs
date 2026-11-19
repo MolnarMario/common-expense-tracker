@@ -31,6 +31,7 @@ const MODULES = [
   'src/transfer.js',
   'src/state.js',
   'src/sharing.js',
+  'src/access.js',
   'src/app.js',
 ];
 

@@ -2,7 +2,9 @@
 //
 // Nobody can make a room by asking nicely. Creating one takes either the
 // admin token, which only you have, or an invite code, which you minted
-// and handed to someone. Everything else here is routing.
+// and handed to someone. Anyone can ask for a code, though: the request
+// waits until you approve it, and then the requester's browser picks the
+// code up. Everything else here is routing.
 
 import { Room } from './room.js';
 import { Registry, normalizeCode } from './registry.js';
@@ -10,7 +12,7 @@ import { Registry, normalizeCode } from './registry.js';
 export { Room, Registry };
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const cors = corsHeaders(request, env);
 
@@ -21,7 +23,7 @@ export default {
     const path = url.pathname.replace(/^\/api/, '').replace(/\/+$/, '') || '/';
 
     try {
-      const response = await route(request, env, path);
+      const response = await route(request, env, path, ctx);
       // A 101 hands back an immutable response, and a socket that came
       // through the upgrade needs no CORS header anyway.
       if (response.status === 101 || response.webSocket) return response;
@@ -35,7 +37,7 @@ export default {
   },
 };
 
-async function route(request, env, path) {
+async function route(request, env, path, ctx) {
   if (path === '/health') return json({ ok: true });
 
   // POST /api/rooms  — the only way a room comes into being.
@@ -54,6 +56,56 @@ async function route(request, env, path) {
       return registryCall(env, '/mint', body);
     }
     return registryCall(env, '/codes');
+  }
+
+  // POST /api/requests  — someone without a code asks for one.
+  if (path === '/requests' && request.method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const answer = await registryJson(env, '/request', {
+      name: body.name,
+      message: body.message,
+      ip: request.headers.get('CF-Connecting-IP') || '',
+    });
+    if (!answer.ok) {
+      const status = answer.error === 'rate' ? 429 : answer.error === 'busy' ? 503 : 400;
+      return json({ error: answer.error }, status);
+    }
+    // Optional heads-up to whoever runs this. It says only that one
+    // arrived: what they wrote stays here, behind the admin token.
+    if (env.NOTIFY_URL && ctx) {
+      ctx.waitUntil(
+        fetch(env.NOTIFY_URL, {
+          method: 'POST',
+          body: 'New access request for the expense tracker',
+        }).catch(() => {})
+      );
+    }
+    return json({ ok: true, id: answer.id, secret: answer.secret });
+  }
+
+  // POST /api/requests/status  — the requester's browser asking how it went.
+  if (path === '/requests/status' && request.method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const answer = await registryJson(env, '/request-status', { id: body.id, secret: body.secret });
+    if (!answer.ok) return json({ error: answer.error }, 404);
+    return json(answer);
+  }
+
+  // GET /api/requests  — what is waiting, for whoever runs this.
+  if (path === '/requests' && request.method === 'GET') {
+    if (!isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+    return registryCall(env, '/requests');
+  }
+
+  // POST /api/requests/:id/approve and /decline
+  const decision = /^\/requests\/([a-z2-7]{16})\/(approve|decline)$/.exec(path);
+  if (decision && request.method === 'POST') {
+    if (!isAdmin(request, env)) return json({ error: 'forbidden' }, 403);
+    const answer = await registryJson(env, '/decide', {
+      id: decision[1],
+      approve: decision[2] === 'approve',
+    });
+    return json(answer, answer.ok ? 200 : answer.error === 'not_found' ? 404 : 409);
   }
 
   const room = /^\/rooms\/([a-z2-7]{32})\/(socket|usage|lock)$/.exec(path);

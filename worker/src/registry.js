@@ -13,6 +13,15 @@ const CODE_CHARS = 16;
 const CLAIM_TRIES = 12;
 const CLAIM_WINDOW_MS = 60 * 60 * 1000;
 
+/** Access requests one address can send per day. */
+const REQUEST_TRIES = 3;
+const REQUEST_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** Requests held at once, waiting or answered. Bounds what a flood can store. */
+const REQUEST_CAP = 200;
+/** Answered or ignored requests are forgotten after this. */
+const REQUEST_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const REQUEST_LIMITS = { name: 60, message: 500 };
+
 export class Registry {
   constructor(ctx, env) {
     this.ctx = ctx;
@@ -34,6 +43,14 @@ export class Registry {
         return json(await this.listCodes());
       case '/rooms':
         return json(await this.listRooms());
+      case '/request':
+        return json(await this.request(body));
+      case '/request-status':
+        return json(await this.requestStatus(body));
+      case '/requests':
+        return json(await this.listRequests());
+      case '/decide':
+        return json(await this.decide(body));
       default:
         return json({ error: 'not_found' }, 404);
     }
@@ -66,18 +83,125 @@ export class Registry {
    * bot that will try anyway: it caps how fast one address can find that
    * out, and keeps the storage writes that come with it bounded.
    */
-  async underLimit(ip) {
+  async underLimit(ip, prefix = 'rl:', tries = CLAIM_TRIES, windowMs = CLAIM_WINDOW_MS) {
     if (!ip) return true;
-    const key = 'rl:' + ip;
+    const key = prefix + ip;
     const now = Date.now();
     const bucket = (await this.ctx.storage.get(key)) || { start: now, tries: 0 };
-    if (now - bucket.start > CLAIM_WINDOW_MS) {
+    if (now - bucket.start > windowMs) {
       bucket.start = now;
       bucket.tries = 0;
     }
     bucket.tries += 1;
     await this.ctx.storage.put(key, bucket);
-    return bucket.tries <= CLAIM_TRIES;
+    return bucket.tries <= tries;
+  }
+
+  // ------------------------------------------------------ access requests
+  //
+  // Someone without a code asks for one. They leave a name and a line about
+  // who they are, and nothing else: no email. Their browser keeps a secret
+  // only it holds and asks back later. Once you approve, the answer it gets
+  // carries a fresh invite code, so the code never travels by email.
+
+  /** A request from a stranger. Returns the id and the secret to ask back with. */
+  async request(body) {
+    const name = cleanText(body.name, REQUEST_LIMITS.name);
+    const message = cleanText(body.message, REQUEST_LIMITS.message);
+    if (!message) return { ok: false, error: 'bad_request' };
+    if (!(await this.underLimit(body.ip, 'rq:', REQUEST_TRIES, REQUEST_WINDOW_MS))) {
+      return { ok: false, error: 'rate' };
+    }
+
+    await this.sweepRequests();
+    const held = await this.ctx.storage.list({ prefix: 'req:', limit: REQUEST_CAP + 1 });
+    if (held.size >= REQUEST_CAP) return { ok: false, error: 'busy' };
+
+    const id = pick(ROOM_ALPHABET, 16);
+    const secret = pick(ROOM_ALPHABET, 32);
+    await this.ctx.storage.put('req:' + id, {
+      createdAt: Date.now(),
+      name,
+      message,
+      // Only a hash: reading storage is not enough to answer as them.
+      secretHash: await sha256(secret),
+      status: 'pending',
+      code: null,
+      decidedAt: null,
+    });
+    return { ok: true, id, secret };
+  }
+
+  /** The requester's browser asking how it went. Only it is ever handed the code. */
+  async requestStatus(body) {
+    const entry = await this.findRequest(body.id);
+    if (!entry || typeof body.secret !== 'string') return { ok: false, error: 'not_found' };
+    if ((await sha256(body.secret)) !== entry.secretHash) return { ok: false, error: 'not_found' };
+    return {
+      ok: true,
+      status: entry.status,
+      code: entry.status === 'approved' ? entry.code : null,
+    };
+  }
+
+  /** Approve, which mints one code for them, or decline. Admin token only. */
+  async decide(body) {
+    const entry = await this.findRequest(body.id);
+    if (!entry) return { ok: false, error: 'not_found' };
+    if (entry.status !== 'pending') return { ok: false, error: 'already_' + entry.status };
+
+    const next = Object.assign({}, entry, { decidedAt: Date.now() });
+    const puts = {};
+    if (body.approve === true) {
+      const code = newCode();
+      puts['code:' + code] = {
+        createdAt: Date.now(),
+        note: ('request: ' + (entry.name || body.id)).slice(0, 120),
+        usedAt: null,
+        roomId: null,
+      };
+      next.status = 'approved';
+      next.code = code;
+    } else {
+      next.status = 'declined';
+    }
+    puts['req:' + body.id] = next;
+    await this.ctx.storage.put(puts);
+    return { ok: true, id: body.id, status: next.status, code: next.code };
+  }
+
+  async findRequest(id) {
+    if (typeof id !== 'string' || !/^[a-z2-7]{16}$/.test(id)) return null;
+    return (await this.ctx.storage.get('req:' + id)) || null;
+  }
+
+  async listRequests() {
+    await this.sweepRequests();
+    const out = [];
+    const page = await this.ctx.storage.list({ prefix: 'req:', limit: 500 });
+    for (const [key, value] of page) {
+      out.push({
+        id: key.slice(4),
+        createdAt: value.createdAt,
+        name: value.name,
+        message: value.message,
+        status: value.status,
+        code: value.code,
+        decidedAt: value.decidedAt,
+      });
+    }
+    out.sort((a, b) => b.createdAt - a.createdAt);
+    return { ok: true, requests: out };
+  }
+
+  async sweepRequests() {
+    const cutoff = Date.now() - REQUEST_TTL_MS;
+    const stale = [];
+    const page = await this.ctx.storage.list({ prefix: 'req:', limit: 500 });
+    for (const [key, value] of page) {
+      if (!value || (value.decidedAt || value.createdAt) < cutoff) stale.push(key);
+    }
+    if (stale.length > 0) await this.ctx.storage.delete(stale);
   }
 
   /** Codes to hand out. Only the admin token reaches this. */
@@ -116,6 +240,11 @@ export class Registry {
     const page = await this.ctx.storage.list({ prefix: 'rl:', limit: 500 });
     for (const [key, value] of page) {
       if (!value || value.start < cutoff) stale.push(key);
+    }
+    const dayAgo = Date.now() - REQUEST_WINDOW_MS;
+    const asked = await this.ctx.storage.list({ prefix: 'rq:', limit: 500 });
+    for (const [key, value] of asked) {
+      if (!value || value.start < dayAgo) stale.push(key);
     }
     if (stale.length > 0) await this.ctx.storage.delete(stale);
   }
@@ -177,6 +306,17 @@ export function normalizeCode(raw) {
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '');
   return cleaned.length === CODE_CHARS ? format(cleaned) : null;
+}
+
+/** Trimmed, control characters dropped, cut to length. Empty when not a string. */
+function cleanText(raw, max) {
+  if (typeof raw !== 'string') return '';
+  return raw.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim().slice(0, max);
+}
+
+async function sha256(text) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 function clamp(value, low, high) {

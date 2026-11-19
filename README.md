@@ -48,7 +48,7 @@ file again.
 ## Test it
 
 ```
-npm test           # 116 unit tests, no dependencies, no browser
+npm test           # 134 unit tests, no dependencies, no browser
 npm run smoke      # two clients through the real protocol, needs npm run api
 npm run ui         # two headless Chrome profiles through the real UI
 ```
@@ -187,9 +187,14 @@ counts what is still waiting.
 
 ### Getting in
 
-Nobody can make a tracker by asking. It takes an invite code you handed out or
-the admin token only you have. See [`worker/README.md`](worker/README.md) for
-deploying the server and minting codes.
+Making a tracker takes an invite code or the admin token only you have.
+Someone without a code can ask for one from the Share dialog: they leave a
+name and a line about who they are, and nothing else, no email and no
+account. You approve or decline with `node scripts/admin.mjs`, and an
+approved request's code fills itself in the next time they open Share in
+that browser, so it never has to be sent by hand. See
+[`worker/README.md`](worker/README.md) for deploying the server, minting
+codes, and answering requests.
 
 If you fork this to host it yourself, change the hostname in the `routes` entry
 of [`worker/wrangler.toml`](worker/wrangler.toml) first. It points at the
@@ -272,6 +277,7 @@ src/sync.js                   the socket, the retries, the offline queue
 src/transfer.js               reading and writing the JSON and CSV formats
 src/state.js                  the store: roster, months, expenses, validation
 src/sharing.js                joining, unlocking, leaving, being in a tracker
+src/access.js                 asking for an invite code, and picking it up
 src/app.js                    rendering and event wiring
 worker/src/index.js           the API, and who is allowed to make a room
 worker/src/room.js            one room: its records and its sockets

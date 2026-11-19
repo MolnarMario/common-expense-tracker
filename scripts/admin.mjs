@@ -4,6 +4,12 @@
 //   node scripts/admin.mjs codes                    codes, and whether they are spent
 //   node scripts/admin.mjs mint 5 "for the flat"    codes to hand out
 //   node scripts/admin.mjs room "<password>" "Ana"  a room made here and now
+//   node scripts/admin.mjs requests                 who asked for a code
+//   node scripts/admin.mjs approve <id>             send them one
+//   node scripts/admin.mjs decline <id>             say no
+//
+// Approving needs no email: the requester's browser checks back and the
+// code fills itself in on their Share dialog.
 //
 // The last one is the hands-on path: it makes the key, locks it with the
 // password you pass, and prints the link. Send the link one way and the
@@ -25,6 +31,9 @@ const USAGE = [
   '  node scripts/admin.mjs codes',
   '  node scripts/admin.mjs mint [count] [note]',
   '  node scripts/admin.mjs room <password> [note]',
+  '  node scripts/admin.mjs requests',
+  '  node scripts/admin.mjs approve <id>',
+  '  node scripts/admin.mjs decline <id>',
   '',
   'reads API, SITE and ADMIN_TOKEN from the environment',
 ].join('\n');
@@ -76,6 +85,26 @@ async function mint(count, note) {
   for (const code of codes) console.log(code);
 }
 
+async function listRequests() {
+  const { requests } = await call('/requests');
+  if (requests.length === 0) return console.log('no requests');
+  for (const r of requests) {
+    const state = r.status === 'pending' ? 'WAITING' : r.status + ' ' + when(r.decidedAt);
+    console.log([when(r.createdAt), r.id, state, r.name || '(no name)'].join('  '));
+    console.log('    ' + r.message.replace(/\s+/g, ' '));
+  }
+}
+
+async function decide(id, approve) {
+  if (!id) throw new Error('give the request id, from: node scripts/admin.mjs requests');
+  const result = await call('/requests/' + id + '/' + (approve ? 'approve' : 'decline'), {});
+  console.log(
+    approve
+      ? 'approved. ' + result.code + ' fills in for them next time they open Share.'
+      : 'declined.'
+  );
+}
+
 async function makeRoom(password, note) {
   if (!password || password.length < 8) {
     throw new Error('give a password of at least 8 characters as the first argument');
@@ -98,6 +127,9 @@ try {
   else if (command === 'codes') await listCodes();
   else if (command === 'mint') await mint(args[0], args[1]);
   else if (command === 'room') await makeRoom(args[0], args[1]);
+  else if (command === 'requests') await listRequests();
+  else if (command === 'approve') await decide(args[0], true);
+  else if (command === 'decline') await decide(args[0], false);
   else console.log(USAGE);
 } catch (error) {
   console.error(error.message);
