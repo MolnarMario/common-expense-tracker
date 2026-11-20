@@ -35,7 +35,9 @@ for reasons you cannot reproduce. If the page really must live somewhere else,
 set `ALLOWED_ORIGIN` in `[vars]` to its exact origin, and nothing else will be
 allowed through.
 
-Generate the admin token with something like `openssl rand -base64 32`. It is
+Generate the admin token with something like `openssl rand -base64 32`, or
+run `node ../scripts/set-admin-token.mjs`, which makes one, sets it, and saves
+it in `worker/.admin-token`. It is
 the only thing standing between a stranger and the ability to mint rooms, and
 it lives in Cloudflare's secret store, never in the repo.
 
