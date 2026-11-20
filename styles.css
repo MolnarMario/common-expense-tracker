@@ -1582,3 +1582,28 @@ tbody tr:last-child td {
   overflow-wrap: anywhere;
   user-select: all;
 }
+
+/* Asking for an invite code, under the create form. */
+
+.access-request {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+
+.access-form {
+  align-self: stretch;
+}
+
+.field textarea {
+  padding: 0.55rem 0.7rem;
+  background-color: var(--surface-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  resize: vertical;
+}

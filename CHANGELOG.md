@@ -4,6 +4,16 @@ What changed in Common Expense Tracker, newest first. The project had no
 git history before it went on GitHub on 2026-10-16, so the entries up to
 then come from the dated work log kept while it was built.
 
+## 2026-11-20 — Ask for an invite code from the app
+
+- The Share dialog has a "No code? Request one" link. It sends a name and
+  a short message, nothing else: no email, no account.
+- Approve or decline with `node scripts/admin.mjs requests`, `approve`
+  and `decline`. An approved code fills itself in the next time the
+  requester opens Share in that browser.
+- Three requests a day per address, 200 held at most, all forgotten
+  after 30 days. An optional `NOTIFY_URL` gets a one-line heads-up.
+
 ## 2026-10-16 — Open source, and it can sit inside another page
 
 - The source is on GitHub under the MIT license.
