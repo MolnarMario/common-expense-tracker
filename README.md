@@ -1,115 +1,90 @@
-# Common Expense Tracker
+<h1 align="center">Common Expense Tracker</h1>
 
-Split shared monthly costs between any number of people and see who owes whom.
-No account and no dependencies. Data lives in the browser's localStorage, and
-you can export any set of months as JSON or CSV to move it elsewhere.
+<p align="center">
+  <b>Split shared monthly costs and see who owes whom.</b><br>
+  For flatmates, couples and anyone who shares bills: add each month's
+  expenses and it works out the payments that square everyone up. No
+  account. Optionally share one tracker live between two devices, encrypted
+  so the server can't read it.
+</p>
 
-**Live: https://expenses.thebarbellengineer.com/**
+<p align="center">
+  <a href="https://expenses.thebarbellengineer.com/"><b>Open the app</b></a> ·
+  <a href="https://thebarbellengineer.com/projects/expense-tracker/">Project page</a> ·
+  <a href="#get-started">Get started</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="LICENSE">MIT license</a>
+</p>
 
-Two people can also share one tracker over a link, editing it at the same time
-from any device. That part needs a server, and the server is built so it cannot
-read a single thing it stores. See [Sharing](#sharing).
+<p align="center">
+  <img src="https://thebarbellengineer.com/assets/img/expense-1600.webp" alt="A month of shared expenses with the balance bar and who owes whom" width="720">
+</p>
 
-The thing you send someone who just wants the app is
-**`common-expense-tracker.html`**: one file, around 200 KB, no install. They
-save it anywhere and double click it. Sharing is off in that copy, because a
-page opened from disk has no server to talk to.
+## Why
 
-## Build the file you hand out
+Splitting a flat's bills usually ends in a spreadsheet nobody trusts, or an
+app that wants everyone to sign up and holds your spending on its servers.
+This tracker does one job: shared costs in, fair transfers out. It runs in
+the browser with no account, keeps money as whole cents so the totals always
+add up, and when two people want the same tracker on their phones, the
+server in between only ever sees ciphertext.
 
-```
-npm run build
-```
+## What it does
 
-Writes `common-expense-tracker.html` in the project root: the markup, the CSS,
-and all fourteen modules folded into one file that runs from `file://` with no
-server.
+### Settle up
 
-`scripts/build.mjs` strips the `import` and `export` keywords and concatenates
-the modules in dependency order inside one IIFE, rather than keeping them as an
-inline ES module, because some browsers refuse to run a module from a `file://`
-page. Flattening puts every module in one scope, so the build fails if two of
-them declare the same top-level name, and it fails if `src/app.js` reaches for
-an element id that `index.html` does not have.
+- **Who owes whom, worked out.** Add each month's shared costs and it shows
+  the transfers that square everyone up, never more than one fewer than the
+  number of people.
+- **A balance bar** shows the month in one picture: who paid what, the
+  fair-share line, and exactly the money that has to change hands.
+- **Money that adds up.** Amounts are stored as whole cents, never floats.
+  Splitting 10,00 three ways gives 3,34 / 3,33 / 3,33, and "42,50", "42.50"
+  and "240.924,00" all parse correctly.
 
-## Work on it
+### Keep the months
 
-```
-npm start          # the page on 5173
-npm run api        # the sync Worker on 8787, only if you are touching sharing
-```
+- **One month at a time**, with one roster of people shared by every month.
+  Removing someone checks every month they ever paid in, and asks whether to
+  move or delete their expenses.
+- **Amounts are in Romanian lei (RON).** Balances say "owes", "gets back"
+  or "settled" in words, not by colour alone.
+- **Export any set of months** as JSON or CSV, and import them back. An
+  import replaces only the months the file names, and shows you exactly what
+  it will replace first.
 
-Open http://localhost:5173, served from the unbundled `index.html` and `src/`
-by `scripts/serve.mjs`. It also forwards `/api` to the Worker, WebSocket
-upgrades included, so local development runs on one origin exactly like
-production does. Edit, reload, and run `npm run build` when you want the single
-file again.
+### Share it, privately
 
-## Test it
+- **Share one tracker live.** One person makes it and sends the other a link
+  and a password. A change on a phone shows up on the other laptop in well
+  under a second, and edits made offline sync when the connection returns.
+- **The server can't read it.** Every record is encrypted in the browser with
+  a 256-bit key, wrapped by a key derived from your password. Neither leaves
+  your device.
+- **Invite only.** Making a shared tracker takes an invite code. No code?
+  Ask for one from the Share dialog with just a name and a line about who you
+  are.
 
-```
-npm test           # 134 unit tests, no dependencies, no browser
-npm run smoke      # two clients through the real protocol, needs npm run api
-npm run ui         # two headless Chrome profiles through the real UI
-```
+### Take it anywhere
 
-The unit tests cover the settlement math, money parsing and formatting, month
-arithmetic, the export and import formats, every store action including each
-acceptance scenario from section 12 of the PRD, the encryption, the op merge
-rules, the offline queue, and the server's conflict resolution driven directly
-with a stand-in for Durable Object storage.
+- **One file you can hand to someone.** `common-expense-tracker.html` is the
+  whole app in about 220 KB. Save it anywhere and double-click it. Sharing is
+  off in that copy, since a page opened from disk has no server to talk to.
+- **Light and dark**, following your system until you choose.
 
-The other two need the Worker running. `smoke` drives two clients through the
-wire protocol and checks, among other things, that the same bytes read with the
-wrong key decrypt to nothing. `ui` launches two separate Chrome profiles as two
-devices, makes a room in one, unlocks it in the other with the password, and
-watches an edit cross between them.
+## Get started
 
-## How it works
+1. Open **https://expenses.thebarbellengineer.com/**.
+2. Open **People** in the header and add everyone who shares the costs.
+3. Add each expense with its amount, who paid, the date and a description.
+4. At the end of the month, open the bottom line to see the balances and the
+   payments that settle them.
+5. To use one tracker from two devices, click **Share**, make a tracker and
+   send the link and password to the other person. Keep the recovery key it
+   shows you: a forgotten password cannot be recovered by anyone.
 
-The amount field takes digits and separators only; anything else you type or
-paste is dropped. It reads "42,50", "42.50", and "240.924,00" alike: the last
-separator is the decimal point when one or two digits follow it, and a
-thousands separator when exactly three do.
-
-Every amount is an integer number of bani or cents. Nothing is ever stored or
-added as a float, so 0,1 + 0,2 can never turn into 0,30000000000000004 in
-someone's balance.
-
-The month's total is split with `splitEvenly`, which hands the leftover minor
-units one at a time to the first people in the list. Three people splitting
-10,00 RON get 3,34 / 3,33 / 3,33, and the shares always add back up to the
-total.
-
-The balance bar in the bottom line is the same numbers as one picture. The
-whole bar is the month's spending, and each person holds a slice as wide as
-what they paid, overpayers on the left. The bold tick is the fair-share line.
-With two people it lands dead centre. The colour boundary always ends up right
-of that tick, and the hatched strip along the floor between the two is exactly
-the money that has to change hands. `balanceBar()` in `src/settlement.js`
-returns the geometry as fractions of the total, so the renderer never does any
-arithmetic of its own.
-
-Colours are one hue per person, handed out in roster order. The first two
-are a periwinkle blue and a muted purple, both cool and neither carrying a
-verdict: red and green read as "good" and "bad", and nobody in a shared flat
-is the bad one. The part of a slice past the fair-share line is the same hue
-at 30% over the track, hatched, so it reads as that person's money on loan
-rather than as a colour of its own. The balance table underneath repeats
-every colour as a labelled swatch, so identity never rests on hue.
-
-Those two hues sit close together. Run through the separation check they
-score a normal-vision delta E of 10.2 against a floor of 15, and 2.9 for
-red-blind viewers, which means they are hard to tell apart when the two
-slices touch. The direct labels on the bar and the swatches in the table are
-what carry identity here. Pulling the purple lighter, to  against a
- blue, clears both floors while keeping the same two-cool-hues idea.
-
-Settlement pairs the largest debtor with the largest creditor, repeatedly. The
-provably minimal set of transfers is an NP-hard problem, so this greedy pass
-does not always find it, but it never emits more than `people - 1` transfers and
-it lands on the obvious answer for the shapes a household actually hits. Tests
-assert that applying every transfer leaves all balances at exactly zero.
+Your own months live in this browser's storage. Use **Data** to export a
+backup now and then; it is the copy that survives a cleared browser.
 
 ## Sharing
 
@@ -258,6 +233,127 @@ alike, falls back to the date when there is no month column, and counts the
 rows it could not read instead of dropping them quietly. A raw copy of what the
 app saves to localStorage imports as well.
 
+## Not in this version
+
+Custom splits, categories, recurring expenses, exchange rates, and marking a
+settlement as paid. Section 4 of the PRD rules them out of the MVP.
+
+There is no merge on import: a month in the file replaces the month here rather
+than adding to it. Two people each logging half a month and combining the
+result would need one of them to paste rows into the other's CSV first, or to
+share a tracker instead, which is what sharing is for.
+
+Sharing has no merge either, for the same reason. Moving your own months into a
+shared tracker is offered only while that tracker is still empty.
+
+## Development
+
+Needs Node.js 22 or newer. The app itself has no dependencies; the sync
+server is a Cloudflare Worker in `worker/`.
+
+### Build the file you hand out
+
+```
+npm run build
+```
+
+Writes `common-expense-tracker.html` in the project root: the markup, the CSS,
+and all fourteen modules folded into one file that runs from `file://` with no
+server.
+
+`scripts/build.mjs` strips the `import` and `export` keywords and concatenates
+the modules in dependency order inside one IIFE, rather than keeping them as an
+inline ES module, because some browsers refuse to run a module from a `file://`
+page. Flattening puts every module in one scope, so the build fails if two of
+them declare the same top-level name, and it fails if `src/app.js` reaches for
+an element id that `index.html` does not have.
+
+### Work on it
+
+```
+npm start          # the page on 5173
+npm run api        # the sync Worker on 8787, only if you are touching sharing
+```
+
+Open http://localhost:5173, served from the unbundled `index.html` and `src/`
+by `scripts/serve.mjs`. It also forwards `/api` to the Worker, WebSocket
+upgrades included, so local development runs on one origin exactly like
+production does. Edit, reload, and run `npm run build` when you want the single
+file again.
+
+### Test it
+
+```
+npm test           # 134 unit tests, no dependencies, no browser
+npm run smoke      # two clients through the real protocol, needs npm run api
+npm run ui         # two headless Chrome profiles through the real UI
+```
+
+The unit tests cover the settlement math, money parsing and formatting, month
+arithmetic, the export and import formats, every store action including each
+acceptance scenario from section 12 of the PRD, the encryption, the op merge
+rules, the offline queue, and the server's conflict resolution driven directly
+with a stand-in for Durable Object storage.
+
+The other two need the Worker running. `smoke` drives two clients through the
+wire protocol and checks, among other things, that the same bytes read with the
+wrong key decrypt to nothing. `ui` launches two separate Chrome profiles as two
+devices, makes a room in one, unlocks it in the other with the password, and
+watches an edit cross between them.
+
+### Host it yourself
+
+`npm run deploy` builds the single file and deploys the Worker. Change the
+hostname in the `routes` entry of [`worker/wrangler.toml`](worker/wrangler.toml)
+first: it points at the maintainer's domain, which your Cloudflare account
+does not own. [`worker/README.md`](worker/README.md) covers deploying,
+minting invite codes and answering access requests.
+
+## How it works
+
+The amount field takes digits and separators only; anything else you type or
+paste is dropped. It reads "42,50", "42.50", and "240.924,00" alike: the last
+separator is the decimal point when one or two digits follow it, and a
+thousands separator when exactly three do.
+
+Every amount is an integer number of bani or cents. Nothing is ever stored or
+added as a float, so 0,1 + 0,2 can never turn into 0,30000000000000004 in
+someone's balance.
+
+The month's total is split with `splitEvenly`, which hands the leftover minor
+units one at a time to the first people in the list. Three people splitting
+10,00 RON get 3,34 / 3,33 / 3,33, and the shares always add back up to the
+total.
+
+The balance bar in the bottom line is the same numbers as one picture. The
+whole bar is the month's spending, and each person holds a slice as wide as
+what they paid, overpayers on the left. The bold tick is the fair-share line.
+With two people it lands dead centre. The colour boundary always ends up right
+of that tick, and the hatched strip along the floor between the two is exactly
+the money that has to change hands. `balanceBar()` in `src/settlement.js`
+returns the geometry as fractions of the total, so the renderer never does any
+arithmetic of its own.
+
+Colours are one hue per person, handed out in roster order. The first two
+are a periwinkle blue and a muted purple, both cool and neither carrying a
+verdict: red and green read as "good" and "bad", and nobody in a shared flat
+is the bad one. The part of a slice past the fair-share line is the same hue
+at 30% over the track, hatched, so it reads as that person's money on loan
+rather than as a colour of its own. The balance table underneath repeats
+every colour as a labelled swatch, so identity never rests on hue.
+
+Those two hues sit close together. Run through the separation check they
+score a normal-vision delta E of 10.2 against a floor of 15, and 2.9 for
+red-blind viewers, which means they are hard to tell apart when the two
+slices touch. The direct labels on the bar and the swatches in the table are
+what carry identity here.
+
+Settlement pairs the largest debtor with the largest creditor, repeatedly. The
+provably minimal set of transfers is an NP-hard problem, so this greedy pass
+does not always find it, but it never emits more than `people - 1` transfers and
+it lands on the obvious answer for the shapes a household actually hits. Tests
+assert that applying every transfer leaves all balances at exactly zero.
+
 ## Files
 
 ```
@@ -301,49 +397,6 @@ Worker, and neither touches the DOM or a Cloudflare API. A record the client
 will send is exactly a record the server will accept, because one file says
 what a record is.
 
-## What it does
+## License
 
-- One month at a time, navigate with the arrows or pick a month directly.
-- **People live in the header.** One roster, shared by every month, managed in
-  the People dialog: add, rename, remove. It starts empty and nothing is ever
-  added for you. The Paid by dropdown picks from that list.
-- Removing someone weighs up every month they ever paid in, not just the one on
-  screen, and says so before doing anything. You then move their expenses to
-  another person or delete them.
-- Add, edit, and delete expenses with amount, payer, date, and description.
-  Expenses belong to the month they were entered in.
-- Everything is in RON. Amounts are stored as whole bani, so no float ever
-  touches a balance.
-- **The bottom line is folded away by default**, showing one line with the
-  month total. Open it at the end of the month for the balance bar, the
-  per-person balances, and the payments that square everyone up. It remembers
-  whether you left it open.
-- **Export any set of months** as JSON or CSV, and import them back. Import
-  replaces only the months the file names and asks first. See above.
-- **Share a tracker** with one other person over a link and a password, editing
-  it at the same time from any device. Encrypted in the browser, so the server
-  stores it without being able to read it. See above.
-- The appearance button switches between light and dark, nothing else. First
-  run follows the operating system; after that your choice sticks. A small
-  inline script in `index.html` applies it before first paint so the other
-  theme never flashes.
-
-Balances are marked with a sign and the words "owes", "gets back", or "settled",
-not by colour alone.
-
-Because the roster is global, adding someone changes the fair share in **every**
-month, including finished ones. That is the trade for not retyping the same
-people twelve times a year. Say so if you would rather freeze past months.
-
-## Not in this version
-
-Custom splits, categories, recurring expenses, exchange rates, and marking a
-settlement as paid. Section 4 of the PRD rules them out of the MVP.
-
-There is no merge on import: a month in the file replaces the month here rather
-than adding to it. Two people each logging half a month and combining the
-result would need one of them to paste rows into the other's CSV first, or to
-share a tracker instead, which is what sharing is for.
-
-Sharing has no merge either, for the same reason. Moving your own months into a
-shared tracker is offered only while that tracker is still empty.
+[MIT](LICENSE). Built by Mario Molnar.
